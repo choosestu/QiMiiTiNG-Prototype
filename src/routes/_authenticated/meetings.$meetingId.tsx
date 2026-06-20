@@ -362,7 +362,7 @@ function MotionRow({
         vote_for: voteFor,
         vote_against: voteAgainst,
         vote_abstain: voteAbstain,
-        result: result || null,
+        result: (result || null) as "carried" | "defeated" | "tabled" | "withdrawn" | null,
       })
       .eq("id", motion.id);
     setBusy(false);
