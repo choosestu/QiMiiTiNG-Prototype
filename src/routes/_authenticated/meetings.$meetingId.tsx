@@ -152,12 +152,14 @@ function MeetingPage() {
     setBusy(false);
   };
 
-  const transition = async (next: Meeting["status"]) => {
+  const transition = async (
+    next: "scheduled" | "reports_open" | "agenda_generated" | "in_progress" | "adjourned" | "minutes_draft" | "minutes_approved",
+  ) => {
     setBusy(true);
-    const patch: Partial<Meeting> = { status: next };
-    if (next === "in_progress") patch.quorum_met = quorumMet;
-    if (next === "adjourned") patch.quorum_met = quorumMet;
-    const { error } = await supabase.from("meetings").update(patch).eq("id", meetingId);
+    const { error } = await supabase
+      .from("meetings")
+      .update({ status: next, quorum_met: quorumMet })
+      .eq("id", meetingId);
     setBusy(false);
     if (error) {
       toast.error(error.message);
