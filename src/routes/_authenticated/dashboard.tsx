@@ -32,6 +32,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
@@ -40,7 +42,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
     ],
   }),
   component: DashboardPage,
+  errorComponent: RouteErrorComponent,
+  notFoundComponent: RouteNotFoundComponent,
 });
+
 
 type Meeting = {
   id: string;
