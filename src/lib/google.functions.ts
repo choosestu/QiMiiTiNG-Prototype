@@ -281,7 +281,6 @@ export const importFieldyTranscript = createServerFn({ method: "POST" })
     if (segments.length > 0) {
       const rows = segments.map((s, i) => ({
         meeting_id: data.meetingId,
-        organization_id: orgId,
         segment_index: i,
         fieldy_segment_id: s.id ?? null,
         speaker: s.speaker ?? null,
@@ -291,6 +290,7 @@ export const importFieldyTranscript = createServerFn({ method: "POST" })
         end_offset: s.end ?? null,
         segment_timestamp: s.timestamp ?? null,
       }));
+      void orgId;
       const { error } = await supabaseAdmin.from("transcript_segments").insert(rows as never);
       if (error) throw error;
     }
