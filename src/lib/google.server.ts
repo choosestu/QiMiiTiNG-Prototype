@@ -117,9 +117,9 @@ async function refreshTokens(refresh_token: string): Promise<Partial<GoogleToken
 export async function getValidAccessToken(orgId: string): Promise<{ token: string; email?: string }> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
-    .from("organizations")
+    .from("organization_secrets")
     .select("google_oauth_tokens")
-    .eq("id", orgId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (error) throw error;
   const tokens = data?.google_oauth_tokens as GoogleTokens | null;
@@ -128,7 +128,7 @@ export async function getValidAccessToken(orgId: string): Promise<{ token: strin
   if (!tokens.refresh_token) throw new Error("Google session expired and no refresh token available. Please reconnect.");
   const refreshed = await refreshTokens(tokens.refresh_token);
   const merged: GoogleTokens = { ...tokens, ...refreshed };
-  await supabaseAdmin.from("organizations").update({ google_oauth_tokens: merged as never }).eq("id", orgId);
+  await supabaseAdmin.from("organization_secrets").update({ google_oauth_tokens: merged as never }).eq("organization_id", orgId);
   return { token: merged.access_token, email: merged.email };
 }
 
