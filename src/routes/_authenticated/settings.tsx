@@ -129,6 +129,22 @@ function SettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Allowed Users</CardTitle>
+            <CardDescription>
+              Manage who is permitted to sign in to QiMiiTiNG for your organization.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => router.navigate({ to: "/settings/allowlist" })}>
+              Manage allowlist
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
