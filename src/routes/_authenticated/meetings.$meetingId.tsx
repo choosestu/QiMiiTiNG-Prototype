@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, CheckCircle2, Circle, ExternalLink, FileText, Mail, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { generateAgenda, sendMeetingNotice, uploadApprovedMinutes } from "@/lib/google.functions";
+import { generateAgenda, sendMeetingNotice, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +52,8 @@ type Meeting = {
   agenda_url: string | null;
   minutes_approved_url: string | null;
   drive_folder_id: string | null;
+  conversation_start_time: string | null;
+  conversation_end_time: string | null;
 };
 
 type OrgUser = { id: string; name: string; email: string };
@@ -175,10 +177,14 @@ function MeetingPage() {
     next: "scheduled" | "reports_open" | "agenda_generated" | "in_progress" | "adjourned" | "minutes_draft" | "minutes_approved",
   ) => {
     setBusy(true);
-    const { error } = await supabase
-      .from("meetings")
-      .update({ status: next, quorum_met: quorumMet })
-      .eq("id", meetingId);
+    const patch: Record<string, unknown> = { status: next, quorum_met: quorumMet };
+    if (next === "in_progress" && !meeting.conversation_start_time) {
+      patch.conversation_start_time = new Date().toISOString();
+    }
+    if (next === "adjourned" && !meeting.conversation_end_time) {
+      patch.conversation_end_time = new Date().toISOString();
+    }
+    const { error } = await supabase.from("meetings").update(patch).eq("id", meetingId);
     setBusy(false);
     if (error) {
       toast.error(error.message);
