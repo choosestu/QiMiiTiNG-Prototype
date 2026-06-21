@@ -370,11 +370,15 @@ function MeetingPage() {
 
             {meeting.status === "adjourned" && (
               <p className="text-sm text-muted-foreground">
-                Meeting adjourned. AI minutes drafting becomes available in Milestone 5.
+                Meeting adjourned. Import the transcript (if recorded) and draft minutes below.
               </p>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {isAdmin && (meeting.status === "adjourned" || meeting.status === "minutes_draft" || meeting.status === "minutes_approved") && (
+        <MinutesCard meeting={meeting} onUpdate={refresh} />
       )}
 
       {isAdmin && <WorkspaceCard meeting={meeting} onUpdate={refresh} />}
