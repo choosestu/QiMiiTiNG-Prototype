@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, CheckCircle2, Circle, Plus } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, FileText, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
