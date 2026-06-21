@@ -8,7 +8,13 @@ export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
+    if (error || !data.user) {
+      // Clear any stale local session so getSession() on /auth doesn't loop
+      // back here. This happens when the auth.users row was deleted server-side
+      // but the browser still holds a cached JWT in localStorage.
+      await supabase.auth.signOut();
+      throw redirect({ to: "/auth" });
+    }
     return { user: data.user };
   },
   component: AuthenticatedLayout,
