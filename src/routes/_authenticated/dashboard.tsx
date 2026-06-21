@@ -88,8 +88,27 @@ function DashboardPage() {
     if (profile) loadMeetings();
   }, [profile]);
 
-  if (loading || !profile) {
+  if (loading) {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  if (!profile) {
+    return (
+      <div className="p-8 space-y-2">
+        <p className="text-sm font-medium text-destructive">Account not found.</p>
+        <p className="text-sm text-muted-foreground">
+          Your login succeeded but no profile row exists in the database. Ask an
+          administrator to complete your account setup, or sign in with a different
+          account.
+        </p>
+        <button
+          className="mt-2 text-sm underline"
+          onClick={() => signOut().then(() => router.navigate({ to: "/" }))}
+        >
+          Sign out
+        </button>
+      </div>
+    );
   }
 
   return (
