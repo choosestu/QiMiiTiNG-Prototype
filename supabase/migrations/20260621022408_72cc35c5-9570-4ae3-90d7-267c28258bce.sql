@@ -1,0 +1,3 @@
+CREATE POLICY "allowed_users_admin_insert" ON public.allowed_users FOR INSERT TO authenticated WITH CHECK (public.is_admin(auth.uid()) AND organization_id = public.current_org(auth.uid()));
+CREATE POLICY "allowed_users_admin_update" ON public.allowed_users FOR UPDATE TO authenticated USING (public.is_admin(auth.uid()) AND organization_id = public.current_org(auth.uid())) WITH CHECK (public.is_admin(auth.uid()) AND organization_id = public.current_org(auth.uid()));
+CREATE POLICY "allowed_users_admin_delete" ON public.allowed_users FOR DELETE TO authenticated USING (public.is_admin(auth.uid()) AND organization_id = public.current_org(auth.uid()));
