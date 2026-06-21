@@ -61,6 +61,14 @@ type Motion = {
   vote_against: number;
   vote_abstain: number;
 };
+type Report = {
+  id: string;
+  user_id: string;
+  report_text: string;
+  bank_balance: number | null;
+  submitted_at: string;
+};
+
 
 const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
