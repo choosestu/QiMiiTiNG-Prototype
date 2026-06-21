@@ -20,7 +20,10 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      // Ignore TOKEN_REFRESHED / INITIAL_SESSION churn — they hand back a new
+      // User object identity every time and would cancel the profile fetch.
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       setSession(s);
       setUser(s?.user ?? null);
     });
@@ -34,16 +37,18 @@ export function useAuth() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setProfile(null);
       return;
     }
     let cancelled = false;
     (async () => {
       const [{ data: u }, { data: r }] = await Promise.all([
-        supabase.from("users").select("id, organization_id, name, email, tier").eq("id", user.id).maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id),
+        supabase.from("users").select("id, organization_id, name, email, tier").eq("id", userId).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", userId),
       ]);
       if (cancelled || !u) return;
       setProfile({
@@ -58,7 +63,7 @@ export function useAuth() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   const isAdmin = !!profile && (profile.roles.includes("chair") || profile.roles.includes("secretary"));
 
