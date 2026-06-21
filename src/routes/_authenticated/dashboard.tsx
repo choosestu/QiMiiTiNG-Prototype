@@ -98,9 +98,16 @@ function DashboardPage() {
               : "Submit your officer reports and review approved meeting documents."}
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => signOut().then(() => router.navigate({ to: "/" }))}>
-          Sign out
-        </Button>
+        <div className="flex items-center gap-1">
+          {isAdmin && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/settings">Settings</Link>
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => signOut().then(() => router.navigate({ to: "/" }))}>
+            Sign out
+          </Button>
+        </div>
       </header>
 
       <section className="space-y-4">
