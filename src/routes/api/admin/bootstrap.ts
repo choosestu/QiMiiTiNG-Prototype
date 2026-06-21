@@ -50,19 +50,7 @@ export const Route = createFileRoute("/api/admin/bootstrap")({
           }
           log.push(`✓ Found org: ${org.name} (${org.id})`);
 
-          // 2. Delete orphaned auth records for all member emails
-          for (const m of MEMBERS) {
-            const { data: authUser } = await supabaseAdmin.auth.admin.listUsers();
-            const existing = authUser?.users?.find(u => u.email === m.email);
-            if (existing) {
-              await supabaseAdmin.from("user_roles").delete().eq("user_id", existing.id);
-              await supabaseAdmin.from("users").delete().eq("id", existing.id);
-              await supabaseAdmin.auth.admin.deleteUser(existing.id);
-              log.push(`✓ Deleted orphaned auth record: ${m.email}`);
-            }
-          }
-
-          // 3. Replace allowed_users with real list
+          // 2. Replace allowed_users with real list
           const { error: delErr } = await supabaseAdmin.from("allowed_users").delete().neq("email", "");
           if (delErr) log.push(`⚠ Could not clear allowed_users: ${delErr.message}`);
           else log.push(`✓ Cleared allowed_users`);
