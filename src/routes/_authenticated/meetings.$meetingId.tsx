@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, CheckCircle2, Circle, ExternalLink, FileText, Mail, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { generateAgenda, sendMeetingNotice, uploadApprovedMinutes } from "@/lib/google.functions";
+import { generateAgenda, sendMeetingNotice, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +52,8 @@ type Meeting = {
   agenda_url: string | null;
   minutes_approved_url: string | null;
   drive_folder_id: string | null;
+  conversation_start_time: string | null;
+  conversation_end_time: string | null;
 };
 
 type OrgUser = { id: string; name: string; email: string };
@@ -175,10 +177,14 @@ function MeetingPage() {
     next: "scheduled" | "reports_open" | "agenda_generated" | "in_progress" | "adjourned" | "minutes_draft" | "minutes_approved",
   ) => {
     setBusy(true);
-    const { error } = await supabase
-      .from("meetings")
-      .update({ status: next, quorum_met: quorumMet })
-      .eq("id", meetingId);
+    const patch: Record<string, unknown> = { status: next, quorum_met: quorumMet };
+    if (next === "in_progress" && !meeting.conversation_start_time) {
+      patch.conversation_start_time = new Date().toISOString();
+    }
+    if (next === "adjourned" && !meeting.conversation_end_time) {
+      patch.conversation_end_time = new Date().toISOString();
+    }
+    const { error } = await supabase.from("meetings").update(patch as never).eq("id", meetingId);
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -364,17 +370,148 @@ function MeetingPage() {
 
             {meeting.status === "adjourned" && (
               <p className="text-sm text-muted-foreground">
-                Meeting adjourned. AI minutes drafting becomes available in Milestone 5.
+                Meeting adjourned. Import the transcript (if recorded) and draft minutes below.
               </p>
             )}
           </CardContent>
         </Card>
       )}
 
+      {isAdmin && (meeting.status === "adjourned" || meeting.status === "minutes_draft" || meeting.status === "minutes_approved") && (
+        <MinutesCard meeting={meeting} onUpdate={refresh} />
+      )}
+
       {isAdmin && <WorkspaceCard meeting={meeting} onUpdate={refresh} />}
     </div>
   );
 }
+
+function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => void }) {
+  const importTranscript = useServerFn(importFieldyTranscript);
+  const draft = useServerFn(draftMinutes);
+  const approve = useServerFn(approveMinutes);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [approvedText, setApprovedText] = useState("");
+  const [segmentCount, setSegmentCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [{ data: m }, { count }] = await Promise.all([
+        supabase
+          .from("minutes")
+          .select("ai_draft_text, approved_text")
+          .eq("meeting_id", meeting.id)
+          .maybeSingle(),
+        supabase
+          .from("transcript_segments")
+          .select("id", { count: "exact", head: true })
+          .eq("meeting_id", meeting.id),
+      ]);
+      if (!active) return;
+      setDraftText((m?.ai_draft_text as string) ?? "");
+      setApprovedText((m?.approved_text as string) ?? (m?.ai_draft_text as string) ?? "");
+      setSegmentCount(count ?? 0);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [meeting.id]);
+
+  const handleImport = async () => {
+    setBusy("import");
+    try {
+      const r = await importTranscript({ data: { meetingId: meeting.id } });
+      toast.success(`Imported ${r.imported} transcript segment(s) from Fieldy`);
+      setSegmentCount(r.imported);
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDraft = async () => {
+    setBusy("draft");
+    try {
+      const r = await draft({ data: { meetingId: meeting.id } });
+      setDraftText(r.draft);
+      setApprovedText((prev) => prev || r.draft);
+      toast.success("Minutes draft generated");
+      onUpdate();
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!approvedText.trim()) {
+      toast.error("Approved minutes text is required.");
+      return;
+    }
+    setBusy("approve");
+    try {
+      await approve({ data: { meetingId: meeting.id, approvedText } });
+      toast.success("Minutes approved. You can now upload them to Drive below.");
+      onUpdate();
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Minutes</CardTitle>
+        <CardDescription>
+          Import the Fieldy transcript (if enabled), generate an AI draft using GPT-4o, then review and approve. Motions are reproduced verbatim.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {meeting.fieldy_enabled && (
+            <Button variant="secondary" disabled={busy !== null} onClick={handleImport}>
+              {busy === "import" ? "Importing…" : `Import Fieldy transcript${segmentCount != null ? ` (${segmentCount})` : ""}`}
+            </Button>
+          )}
+          <Button disabled={busy !== null} onClick={handleDraft}>
+            {busy === "draft" ? "Drafting…" : draftText ? "Re-draft minutes (AI)" : "Draft minutes (AI)"}
+          </Button>
+        </div>
+
+        {draftText && (
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">AI draft (read-only)</Label>
+            <Textarea readOnly rows={8} value={draftText} className="font-mono text-xs" />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label className="text-xs uppercase text-muted-foreground">Approved minutes (editable)</Label>
+          <Textarea
+            rows={12}
+            value={approvedText}
+            onChange={(e) => setApprovedText(e.target.value)}
+            placeholder="Edit the AI draft above, then approve. Edits are audit-logged."
+            className="font-mono text-xs"
+          />
+          <div className="flex justify-end">
+            <Button variant="default" disabled={busy !== null || !approvedText.trim()} onClick={handleApprove}>
+              {busy === "approve" ? "Approving…" : meeting.status === "minutes_approved" ? "Save edits (audit logged)" : "Approve minutes"}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
 
 function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => void }) {
   const genAgenda = useServerFn(generateAgenda);
