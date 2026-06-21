@@ -301,6 +301,19 @@ function MeetingPage() {
             <CardDescription>Advance the meeting through its stages.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {meeting.status === "scheduled" && (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                <div className="text-sm">
+                  <p className="font-medium">Open reports</p>
+                  <p className="text-muted-foreground">
+                    Allow officers to submit their reports for this meeting.
+                  </p>
+                </div>
+                <Button variant="secondary" onClick={() => transition("reports_open")} disabled={busy}>
+                  Open reports
+                </Button>
+              </div>
+            )}
             {canCallToOrder && (
               <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
                 <div className="text-sm">
