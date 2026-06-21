@@ -230,13 +230,24 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
     const recipients = (usersRows ?? []).filter((u: any) => u.email);
     if (recipients.length === 0) throw new Error("No recipients with email addresses.");
 
+    const esc = (s: string) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    const safeAgendaUrl =
+      typeof meeting.agenda_url === "string" && /^https:\/\//i.test(meeting.agenda_url)
+        ? meeting.agenda_url
+        : null;
     const subject = `[${org?.name ?? "Meeting"}] ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
     const html = `
-      <p>You are invited to the upcoming ${meeting.meeting_type} meeting.</p>
-      <p><strong>${meeting.title}</strong><br/>
-      Date: ${meeting.meeting_date.slice(0, 10)}<br/>
-      Type: ${meeting.meeting_type}</p>
-      ${meeting.agenda_url ? `<p>Agenda: <a href="${meeting.agenda_url}">${meeting.agenda_url}</a></p>` : ""}
+      <p>You are invited to the upcoming ${esc(meeting.meeting_type)} meeting.</p>
+      <p><strong>${esc(meeting.title)}</strong><br/>
+      Date: ${esc(meeting.meeting_date.slice(0, 10))}<br/>
+      Type: ${esc(meeting.meeting_type)}</p>
+      ${safeAgendaUrl ? `<p>Agenda: <a href="${esc(safeAgendaUrl)}">${esc(safeAgendaUrl)}</a></p>` : ""}
       <p>Please submit any officer reports in QiMiiTiNG before the meeting.</p>
     `;
 
