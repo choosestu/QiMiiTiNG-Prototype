@@ -49,6 +49,9 @@ type Meeting = {
   quorum_required: number;
   quorum_met: boolean | null;
   fieldy_enabled: boolean;
+  agenda_url: string | null;
+  minutes_approved_url: string | null;
+  drive_folder_id: string | null;
 };
 
 type OrgUser = { id: string; name: string; email: string };
