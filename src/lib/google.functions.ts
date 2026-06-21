@@ -172,7 +172,7 @@ export const generateAgenda = createServerFn({ method: "POST" })
           .from("motions")
           .select("motion_text, result")
           .eq("meeting_id", priorMeeting.id)
-          .in("result", ["tabled", "postponed"]),
+          .in("result", ["tabled"]),
       ]);
       previousMinutes = {
         title: priorMeeting.title,
