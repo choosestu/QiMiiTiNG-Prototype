@@ -5,7 +5,7 @@ nixPkgs = ["bun", "nodejs_20"]
 cmds = ["bun install"]
 
 [phases.build]
-cmds = ["node ./node_modules/vinxi/bin/cli.mjs build"]
+cmds = ["./node_modules/.bin/vite build"]
 
 [start]
 cmd = "node .output/server/index.mjs"
