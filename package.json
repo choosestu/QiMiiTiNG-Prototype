@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bunx vinxi dev",
-    "build": "./node_modules/.bin/vinxi build",
+    "build": "node node_modules/vinxi/bin/vinxi.js build",
     "start": "node .output/server/index.mjs",
     "build:lovable": "vite build",
     "lint": "eslint .",
