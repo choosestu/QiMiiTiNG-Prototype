@@ -591,6 +591,10 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
             {busy === "minutes" ? "Uploading…" : "Upload approved minutes"}
           </Button>
         </div>
+        <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          AI-generated agendas follow Robert's Rules and LPC By-law 2 conventions. Always review before distribution — the chair is responsible for the final content.
+        </p>
+
         <div className="space-y-1 text-sm">
           {meeting.agenda_url && (
             <a href={meeting.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
