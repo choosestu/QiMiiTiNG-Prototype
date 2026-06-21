@@ -184,7 +184,7 @@ function MeetingPage() {
     if (next === "adjourned" && !meeting.conversation_end_time) {
       patch.conversation_end_time = new Date().toISOString();
     }
-    const { error } = await supabase.from("meetings").update(patch).eq("id", meetingId);
+    const { error } = await supabase.from("meetings").update(patch as never).eq("id", meetingId);
     setBusy(false);
     if (error) {
       toast.error(error.message);
