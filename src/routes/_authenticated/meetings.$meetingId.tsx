@@ -370,7 +370,85 @@ function MeetingPage() {
           </CardContent>
         </Card>
       )}
+
+      {isAdmin && <WorkspaceCard meeting={meeting} onUpdate={refresh} />}
     </div>
+  );
+}
+
+function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => void }) {
+  const genAgenda = useServerFn(generateAgenda);
+  const sendNotice = useServerFn(sendMeetingNotice);
+  const uploadMins = useServerFn(uploadApprovedMinutes);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const run = async (key: string, fn: () => Promise<{ agendaUrl?: string; sent?: number; minutesUrl?: string }>, ok: (r: any) => string) => {
+    setBusy(key);
+    try {
+      const r = await fn();
+      toast.success(ok(r));
+      onUpdate();
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      else toast.error(msg);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Google Workspace</CardTitle>
+        <CardDescription>
+          Generate the agenda with AI, email the meeting notice, and archive approved minutes to Drive.{" "}
+          <Link to="/settings" className="underline">Manage connection</Link>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            disabled={busy !== null}
+            onClick={() => run("agenda", () => genAgenda({ data: { meetingId: meeting.id } }), (r) => `Agenda generated and saved to Drive`)}
+          >
+            <FileText className="mr-1 size-4" />
+            {busy === "agenda" ? "Generating…" : "Generate agenda (AI)"}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={busy !== null || !meeting.agenda_url}
+            onClick={() => run("notice", () => sendNotice({ data: { meetingId: meeting.id } }), (r) => `Meeting notice sent to ${r.sent} recipient(s)`)}
+            title={meeting.agenda_url ? undefined : "Generate the agenda first"}
+          >
+            <Mail className="mr-1 size-4" />
+            {busy === "notice" ? "Sending…" : "Send meeting notice"}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={busy !== null || meeting.status !== "minutes_draft"}
+            onClick={() => run("minutes", () => uploadMins({ data: { meetingId: meeting.id } }), () => "Approved minutes uploaded to Drive")}
+            title={meeting.status === "minutes_draft" ? undefined : "Approve minutes first (Milestone 5)"}
+          >
+            <Upload className="mr-1 size-4" />
+            {busy === "minutes" ? "Uploading…" : "Upload approved minutes"}
+          </Button>
+        </div>
+        <div className="space-y-1 text-sm">
+          {meeting.agenda_url && (
+            <a href={meeting.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+              <ExternalLink className="size-3" /> Agenda.pdf
+            </a>
+          )}
+          {meeting.minutes_approved_url && (
+            <a href={meeting.minutes_approved_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+              <ExternalLink className="size-3" /> Minutes-Approved.pdf
+            </a>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
