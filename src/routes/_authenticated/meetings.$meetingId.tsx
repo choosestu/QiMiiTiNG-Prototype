@@ -492,6 +492,16 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
           </Button>
         </div>
 
+        <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          AI drafts are a starting point only. The secretary must review every line for accuracy before approval. Motion text is reproduced verbatim and must not be edited.
+        </p>
+
+        {!draftText && segmentCount === 0 && meeting.fieldy_enabled && (
+          <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+            No transcript imported yet. Import from Fieldy to include discussion summaries.
+          </p>
+        )}
+
         {draftText && (
           <div className="space-y-2">
             <Label className="text-xs uppercase text-muted-foreground">AI draft (read-only)</Label>
@@ -518,6 +528,7 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
     </Card>
   );
 }
+
 
 
 
