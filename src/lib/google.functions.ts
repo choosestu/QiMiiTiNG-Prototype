@@ -11,7 +11,13 @@ function getOrigin(): string {
 }
 
 async function ensureAdmin(supabase: any, userId: string, orgId: string) {
-  const { data } = await supabase.rpc("is_admin", { _user_id: userId });
+  const { data } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["chair", "secretary"])
+    .limit(1)
+    .maybeSingle();
   if (!data) throw new Error("Admin role required.");
   return orgId;
 }
