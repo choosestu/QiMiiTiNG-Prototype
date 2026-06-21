@@ -283,8 +283,8 @@ function MeetingPage() {
       />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
+        <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 space-y-0">
+          <div className="min-w-0">
             <CardTitle className="text-base">Motions</CardTitle>
             <CardDescription>Recorded verbatim as moved.</CardDescription>
           </div>
@@ -294,7 +294,7 @@ function MeetingPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {motions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
               No motions yet.
               {meeting.status !== "in_progress" && " Motions can be recorded once the meeting is called to order."}
             </p>
@@ -311,6 +311,7 @@ function MeetingPage() {
           )}
         </CardContent>
       </Card>
+
 
       {isAdmin && (
         <Card>
