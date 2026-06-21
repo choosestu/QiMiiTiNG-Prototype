@@ -86,10 +86,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "QiMiiTiNG automates the lifecycle of volunteer organization meetings: officer reports, agendas, motions, and AI-drafted minutes.",
       },
       { name: "author", content: "QiMiiTiNG" },
-      { property: "og:title", content: "QiMiiTiNG" },
-      { property: "og:description", content: "Meeting automation for volunteer organizations." },
+      { property: "og:title", content: "QiMiiTiNG — Meeting automation for volunteer organizations" },
+      { property: "og:description", content: "QiMiiTiNG — Meeting automation for volunteer organizations. Run your board the way Robert's Rules intended, without the paperwork." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "QiMiiTiNG — Meeting automation for volunteer organizations" },
+      { name: "description", content: "QiMiiTiNG — Meeting automation for volunteer organizations. Run your board the way Robert's Rules intended, without the paperwork." },
+      { name: "twitter:description", content: "QiMiiTiNG — Meeting automation for volunteer organizations. Run your board the way Robert's Rules intended, without the paperwork." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/WxyLHG68lEdWfZaE9C2O5rj6KqX2/social-images/social-1782011402313-Logo_-_QiMiiTiNG.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/WxyLHG68lEdWfZaE9C2O5rj6KqX2/social-images/social-1782011402313-Logo_-_QiMiiTiNG.webp" },
     ],
     links: [
       {
