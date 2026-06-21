@@ -82,8 +82,35 @@ export const Route = createFileRoute("/api/admin/bootstrap")({
           }
           log.push(`✓ Inserted ${inserts.length} members into allowed_users`);
 
+          // 4. For any member already in auth.users, create their public.users
+          //    and user_roles rows directly — don't rely on the trigger.
+          const { data: allAuthUsers } = await supabaseAdmin.auth.admin.listUsers();
+          for (const m of MEMBERS) {
+            const authUser = allAuthUsers?.users?.find(u => u.email === m.email);
+            if (!authUser) continue;
+
+            // Upsert public.users row
+            const { error: uErr } = await supabaseAdmin.from("users").upsert({
+              id: authUser.id,
+              organization_id: org.id,
+              name: m.name,
+              email: m.email,
+              tier: m.tier,
+            }, { onConflict: "id" });
+            if (uErr) log.push(`⚠ public.users upsert failed for ${m.email}: ${uErr.message}`);
+            else log.push(`✓ public.users row ensured for ${m.email}`);
+
+            // Upsert user_roles row
+            const { error: rErr } = await supabaseAdmin.from("user_roles").upsert({
+              user_id: authUser.id,
+              role: m.role,
+            }, { onConflict: "user_id,role" });
+            if (rErr) log.push(`⚠ user_roles upsert failed for ${m.email}: ${rErr.message}`);
+            else log.push(`✓ user_roles row ensured for ${m.email} (${m.role})`);
+          }
+
           log.push("");
-          log.push("Bootstrap complete. You can now sign up at /auth with any of the listed emails.");
+          log.push("Bootstrap complete. Reload your dashboard — it should work now.");
           log.push("Delete or disable this endpoint after use: src/routes/api/admin/bootstrap.ts");
 
           return json({ ok: true, log }, 200);
