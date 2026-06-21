@@ -21,7 +21,13 @@ export type GoogleTokens = {
 };
 
 function stateSecret() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "fallback-state-secret";
+  const secret = process.env.GOOGLE_OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) {
+    throw new Error(
+      "OAuth state signing secret is not configured. Set GOOGLE_OAUTH_STATE_SECRET (or ensure SUPABASE_SERVICE_ROLE_KEY is available) before initiating Google OAuth.",
+    );
+  }
+  return secret;
 }
 
 export function signState(payload: Record<string, unknown>) {
