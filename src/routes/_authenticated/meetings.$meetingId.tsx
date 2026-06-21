@@ -32,12 +32,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
+
 export const Route = createFileRoute("/_authenticated/meetings/$meetingId")({
   head: () => ({
     meta: [{ title: "Meeting — QiMiiTiNG" }],
   }),
   component: MeetingPage,
+  errorComponent: RouteErrorComponent,
+  notFoundComponent: RouteNotFoundComponent,
 });
+
 
 type Meeting = {
   id: string;
