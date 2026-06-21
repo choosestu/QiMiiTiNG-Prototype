@@ -32,6 +32,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
@@ -40,7 +42,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
     ],
   }),
   component: DashboardPage,
+  errorComponent: RouteErrorComponent,
+  notFoundComponent: RouteNotFoundComponent,
 });
+
 
 type Meeting = {
   id: string;
@@ -88,17 +93,17 @@ function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-serif text-3xl">Welcome, {profile.name.split(" ")[0]}</h1>
+    <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:py-8">
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:flex-wrap sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate font-serif text-2xl sm:text-3xl">Welcome, {profile.name.split(" ")[0]}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {isAdmin
               ? "You have administrative access. Create and manage meetings below."
               : "Submit your officer reports and review approved meeting documents."}
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {isAdmin && (
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings">Settings</Link>
@@ -109,6 +114,7 @@ function DashboardPage() {
           </Button>
         </div>
       </header>
+
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

@@ -32,12 +32,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
+
 export const Route = createFileRoute("/_authenticated/meetings/$meetingId")({
   head: () => ({
     meta: [{ title: "Meeting — QiMiiTiNG" }],
   }),
   component: MeetingPage,
+  errorComponent: RouteErrorComponent,
+  notFoundComponent: RouteNotFoundComponent,
 });
+
 
 type Meeting = {
   id: string;
@@ -152,8 +157,21 @@ function MeetingPage() {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
   }
   if (!meeting) {
-    return <p className="p-8 text-sm text-muted-foreground">Meeting not found.</p>;
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <h2 className="font-serif text-xl">Meeting not found.</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          It may have been deleted or you don't have access.
+        </p>
+        <div className="mt-4">
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/dashboard">Back to dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    );
   }
+
 
   const editable = isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
 
@@ -209,7 +227,7 @@ function MeetingPage() {
   const allValid = validations.every((v) => v.ok);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:py-8">
       <Button variant="ghost" size="sm" asChild>
         <Link to="/dashboard">
           <ArrowLeft className="mr-1 h-4 w-4" />
@@ -217,16 +235,16 @@ function MeetingPage() {
         </Link>
       </Button>
 
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl">{meeting.title}</h1>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:flex-wrap sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate font-serif text-2xl sm:text-3xl">{meeting.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {format(new Date(meeting.meeting_date + "T00:00:00"), "PPPP")} ·{" "}
             {meeting.meeting_type.replace("_", " ")}
             {meeting.fieldy_enabled && " · Fieldy enabled"}
           </p>
         </div>
-        <Badge variant="secondary" className="text-sm">
+        <Badge variant="secondary" className="shrink-0 text-sm">
           {STATUS_LABEL[meeting.status]}
         </Badge>
       </header>
@@ -243,28 +261,35 @@ function MeetingPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {users.map((u) => {
-            const a = attendees.find((x) => x.user_id === u.id);
-            const present = a?.present ?? false;
-            return (
-              <label
-                key={u.id}
-                className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2"
-              >
-                <span className="text-sm">
-                  {u.name}
-                  <span className="ml-2 text-xs text-muted-foreground">{u.email}</span>
-                </span>
-                <Checkbox
-                  checked={present}
-                  disabled={!editable || busy}
-                  onCheckedChange={(v) => toggleAttendance(u.id, !!v)}
-                />
-              </label>
-            );
-          })}
+          {users.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+              No officers found in this organization yet.
+            </p>
+          ) : (
+            users.map((u) => {
+              const a = attendees.find((x) => x.user_id === u.id);
+              const present = a?.present ?? false;
+              return (
+                <label
+                  key={u.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="block truncate">{u.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{u.email}</span>
+                  </span>
+                  <Checkbox
+                    checked={present}
+                    disabled={!editable || busy}
+                    onCheckedChange={(v) => toggleAttendance(u.id, !!v)}
+                  />
+                </label>
+              );
+            })
+          )}
         </CardContent>
       </Card>
+
 
       <ReportsCard
         meeting={meeting}
@@ -276,8 +301,8 @@ function MeetingPage() {
       />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
+        <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 space-y-0">
+          <div className="min-w-0">
             <CardTitle className="text-base">Motions</CardTitle>
             <CardDescription>Recorded verbatim as moved.</CardDescription>
           </div>
@@ -287,7 +312,7 @@ function MeetingPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {motions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
               No motions yet.
               {meeting.status !== "in_progress" && " Motions can be recorded once the meeting is called to order."}
             </p>
@@ -304,6 +329,7 @@ function MeetingPage() {
           )}
         </CardContent>
       </Card>
+
 
       {isAdmin && (
         <Card>
@@ -484,6 +510,16 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
           </Button>
         </div>
 
+        <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          AI drafts are a starting point only. The secretary must review every line for accuracy before approval. Motion text is reproduced verbatim and must not be edited.
+        </p>
+
+        {!draftText && segmentCount === 0 && meeting.fieldy_enabled && (
+          <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+            No transcript imported yet. Import from Fieldy to include discussion summaries.
+          </p>
+        )}
+
         {draftText && (
           <div className="space-y-2">
             <Label className="text-xs uppercase text-muted-foreground">AI draft (read-only)</Label>
@@ -510,6 +546,7 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
     </Card>
   );
 }
+
 
 
 
@@ -572,6 +609,10 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
             {busy === "minutes" ? "Uploading…" : "Upload approved minutes"}
           </Button>
         </div>
+        <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          AI-generated agendas follow Robert's Rules and LPC By-law 2 conventions. Always review before distribution — the chair is responsible for the final content.
+        </p>
+
         <div className="space-y-1 text-sm">
           {meeting.agenda_url && (
             <a href={meeting.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">

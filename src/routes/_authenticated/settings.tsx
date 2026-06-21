@@ -14,10 +14,15 @@ import {
   disconnectGoogle,
 } from "@/lib/google.functions";
 
+import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
+
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Settings — QiMiiTiNG" }] }),
   component: SettingsPage,
+  errorComponent: RouteErrorComponent,
+  notFoundComponent: RouteNotFoundComponent,
 });
+
 
 function SettingsPage() {
   const { profile, isAdmin, loading } = useAuth();
