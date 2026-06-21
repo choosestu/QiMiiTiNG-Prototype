@@ -586,3 +586,187 @@ function AddMotionDialog({
     </Dialog>
   );
 }
+
+function ReportsCard({
+  meeting,
+  users,
+  reports,
+  currentUserId,
+  isAdmin,
+  onUpdate,
+}: {
+  meeting: Meeting;
+  users: OrgUser[];
+  reports: Report[];
+  currentUserId: string;
+  isAdmin: boolean;
+  onUpdate: () => void;
+}) {
+  const reportsOpen =
+    meeting.status === "reports_open" ||
+    meeting.status === "agenda_generated" ||
+    meeting.status === "in_progress";
+
+  const myReport = reports.find((r) => r.user_id === currentUserId);
+  const visibleUsers = isAdmin ? users : users.filter((u) => u.id === currentUserId);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Officer reports</CardTitle>
+        <CardDescription>
+          {meeting.status === "scheduled"
+            ? "Reports submission opens once the chair opens reports."
+            : reportsOpen
+              ? "Officers submit a written report for this meeting."
+              : "Report submission is closed for this meeting."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {!isAdmin && reportsOpen && (
+          <div className="mb-2">
+            <ReportDialog
+              meetingId={meeting.id}
+              organizationId={meeting.organization_id}
+              userId={currentUserId}
+              existing={myReport}
+              onSaved={onUpdate}
+              triggerLabel={myReport ? "Edit my report" : "Submit my report"}
+            />
+          </div>
+        )}
+        {visibleUsers.map((u) => {
+          const r = reports.find((x) => x.user_id === u.id);
+          const isSelf = u.id === currentUserId;
+          return (
+            <div
+              key={u.id}
+              className="flex items-start justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{u.name}</span>
+                  {r ? (
+                    <Badge variant="secondary" className="text-xs">Submitted</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">Pending</Badge>
+                  )}
+                </div>
+                {r && (
+                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+                    {r.report_text}
+                    {r.bank_balance != null && (
+                      <span className="ml-2 font-medium text-foreground">
+                        · Bank balance ${Number(r.bank_balance).toFixed(2)}
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+              {isSelf && reportsOpen && isAdmin && (
+                <ReportDialog
+                  meetingId={meeting.id}
+                  organizationId={meeting.organization_id}
+                  userId={currentUserId}
+                  existing={r}
+                  onSaved={onUpdate}
+                  triggerLabel={r ? "Edit" : "Submit"}
+                />
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReportDialog({
+  meetingId,
+  organizationId,
+  userId,
+  existing,
+  onSaved,
+  triggerLabel,
+}: {
+  meetingId: string;
+  organizationId: string;
+  userId: string;
+  existing?: Report;
+  onSaved: () => void;
+  triggerLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(existing?.report_text ?? "");
+  const [bank, setBank] = useState<string>(
+    existing?.bank_balance != null ? String(existing.bank_balance) : "",
+  );
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!text.trim()) {
+      toast.error("Enter your report text.");
+      return;
+    }
+    setBusy(true);
+    const payload = {
+      meeting_id: meetingId,
+      user_id: userId,
+      organization_id: organizationId,
+      report_text: text.trim(),
+      bank_balance: bank.trim() === "" ? null : Number(bank),
+    };
+    const { error } = existing
+      ? await supabase.from("officer_reports").update(payload).eq("id", existing.id)
+      : await supabase.from("officer_reports").insert(payload);
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(existing ? "Report updated" : "Report submitted");
+    setOpen(false);
+    onSaved();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant={existing ? "outline" : "default"}>
+          {triggerLabel}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{existing ? "Edit report" : "Submit report"}</DialogTitle>
+          <DialogDescription>
+            Your written report for this meeting. Bank balance is optional (treasurer use).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Report text</Label>
+            <Textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label>Bank balance (optional)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="e.g. 1234.56"
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={submit} disabled={busy}>
+            {busy ? "Saving…" : existing ? "Save changes" : "Submit report"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
