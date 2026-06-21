@@ -77,9 +77,9 @@ export const disconnectGoogle = createServerFn({ method: "POST" })
     await ensureAdmin(supabase, userId, profile.organization_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
-      .from("organizations")
+      .from("organization_secrets")
       .update({ google_oauth_tokens: null })
-      .eq("id", profile.organization_id);
+      .eq("organization_id", profile.organization_id);
     return { ok: true };
   });
 
