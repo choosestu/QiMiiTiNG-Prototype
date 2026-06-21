@@ -103,17 +103,24 @@ async function generateAgendaText(args: {
   meeting: { title: string; meeting_type: string; meeting_date: string };
   reports: { name: string; role: string; bank_balance: number | null; report_text: string }[];
   previousMotions: string[];
+  previousMinutes: { title: string; date: string; approved: boolean } | null;
 }): Promise<string> {
   const { openaiChat, AGENDA_SYSTEM_PROMPT } = await import("./openai.server");
+  const prevMinutesLine = args.previousMinutes
+    ? `${args.previousMinutes.title} (${args.previousMinutes.date.slice(0, 10)}) — ${args.previousMinutes.approved ? "minutes approved and available for reading" : "minutes draft pending approval"}`
+    : "(no prior meeting on record)";
   const userMessage = `Organization: ${args.org.name}
 Meeting title: ${args.meeting.title}
 Meeting type: ${args.meeting.meeting_type}
 Meeting date: ${args.meeting.meeting_date.slice(0, 10)}
 
+Previous meeting for "Approval of Previous Minutes" section:
+${prevMinutesLine}
+
 Officer reports submitted (use only these — do not invent items):
 ${args.reports.map((r) => `- ${r.name} (${r.role})${r.bank_balance != null ? ` [Balance: $${r.bank_balance}]` : ""}: ${r.report_text}`).join("\n") || "(none submitted)"}
 
-Business arising from prior meetings:
+Business arising from prior meetings (tabled or unresolved motions — reproduce verbatim):
 ${args.previousMotions.join("\n") || "(none)"}
 
 Produce only the agenda body as plain text, using the required section headings on their own lines. Do not use markdown.`;
@@ -127,12 +134,20 @@ export const generateAgenda = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
 
-    const [{ data: org }, { data: reportsRaw }] = await Promise.all([
+    const [{ data: org }, { data: reportsRaw }, { data: priorMeeting }] = await Promise.all([
       supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
       supabase
         .from("officer_reports")
         .select("report_text, bank_balance, user_id")
         .eq("meeting_id", data.meetingId),
+      supabase
+        .from("meetings")
+        .select("id, title, meeting_date")
+        .eq("organization_id", orgId)
+        .lt("meeting_date", meeting.meeting_date)
+        .order("meeting_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
     const userIds = (reportsRaw ?? []).map((r: any) => r.user_id);
     const { data: usersRows } = userIds.length
@@ -148,11 +163,33 @@ export const generateAgenda = createServerFn({ method: "POST" })
       report_text: r.report_text,
     }));
 
+    let previousMinutes: { title: string; date: string; approved: boolean } | null = null;
+    let previousMotions: string[] = [];
+    if (priorMeeting) {
+      const [{ data: prevMin }, { data: prevMotions }] = await Promise.all([
+        supabase.from("minutes").select("approved_text").eq("meeting_id", priorMeeting.id).maybeSingle(),
+        supabase
+          .from("motions")
+          .select("motion_text, result")
+          .eq("meeting_id", priorMeeting.id)
+          .in("result", ["tabled", "postponed"]),
+      ]);
+      previousMinutes = {
+        title: priorMeeting.title,
+        date: priorMeeting.meeting_date,
+        approved: !!prevMin?.approved_text,
+      };
+      previousMotions = (prevMotions ?? []).map(
+        (m: any) => `- [${m.result}] ${m.motion_text}`,
+      );
+    }
+
     const agendaBody = await generateAgendaText({
       org: { name: org?.name ?? "Organization" },
       meeting,
       reports,
-      previousMotions: [],
+      previousMotions,
+      previousMinutes,
     });
 
     const { renderDocumentPdf } = await import("./pdf.server");
