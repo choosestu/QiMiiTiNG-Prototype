@@ -157,8 +157,21 @@ function MeetingPage() {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
   }
   if (!meeting) {
-    return <p className="p-8 text-sm text-muted-foreground">Meeting not found.</p>;
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <h2 className="font-serif text-xl">Meeting not found.</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          It may have been deleted or you don't have access.
+        </p>
+        <div className="mt-4">
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/dashboard">Back to dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    );
   }
+
 
   const editable = isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
 
