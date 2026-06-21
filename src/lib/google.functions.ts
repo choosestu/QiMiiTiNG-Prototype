@@ -249,3 +249,205 @@ export const uploadApprovedMinutes = createServerFn({ method: "POST" })
     await supabaseAdmin.from("minutes").update({ drive_url: webViewLink }).eq("meeting_id", data.meetingId);
     return { minutesUrl: webViewLink };
   });
+
+// ---------- Fieldy transcript import ----------
+
+export const importFieldyTranscript = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
+    if (!meeting.fieldy_enabled) throw new Error("Fieldy recording is not enabled for this meeting.");
+
+    // Determine time window. Prefer recorded conversation times; fall back to meeting_date.
+    const start = meeting.conversation_start_time
+      ? new Date(meeting.conversation_start_time)
+      : new Date(`${meeting.meeting_date.slice(0, 10)}T00:00:00Z`);
+    const end = meeting.conversation_end_time
+      ? new Date(meeting.conversation_end_time)
+      : new Date(`${meeting.meeting_date.slice(0, 10)}T23:59:59Z`);
+
+    const { fetchFieldyTranscriptions } = await import("./fieldy.server");
+    const segments = await fetchFieldyTranscriptions({
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      pageSize: 500,
+    });
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Replace existing transcript for this meeting.
+    await supabaseAdmin.from("transcript_segments").delete().eq("meeting_id", data.meetingId);
+    if (segments.length > 0) {
+      const rows = segments.map((s, i) => ({
+        meeting_id: data.meetingId,
+        organization_id: orgId,
+        segment_index: i,
+        fieldy_segment_id: s.id ?? null,
+        speaker: s.speaker ?? null,
+        speaker_profile_id: s.speaker_profile_id ?? null,
+        text: s.text,
+        start_offset: s.start ?? null,
+        end_offset: s.end ?? null,
+        segment_timestamp: s.timestamp ?? null,
+      }));
+      const { error } = await supabaseAdmin.from("transcript_segments").insert(rows as never);
+      if (error) throw error;
+    }
+    return { imported: segments.length };
+  });
+
+// ---------- Minutes draft + approval ----------
+
+export const draftMinutes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
+    if (meeting.status !== "adjourned" && meeting.status !== "minutes_draft") {
+      throw new Error("Minutes can only be drafted after the meeting is adjourned.");
+    }
+
+    const [
+      { data: org },
+      { data: attendeesRaw },
+      { data: motions },
+      { data: reportsRaw },
+      { data: segments },
+    ] = await Promise.all([
+      supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
+      supabase.from("attendees").select("user_id, present").eq("meeting_id", data.meetingId),
+      supabase
+        .from("motions")
+        .select("motion_text, moved_by, seconded_by, result, vote_for, vote_against, vote_abstain")
+        .eq("meeting_id", data.meetingId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("officer_reports")
+        .select("report_text, bank_balance, user_id")
+        .eq("meeting_id", data.meetingId),
+      supabase
+        .from("transcript_segments")
+        .select("speaker, text, segment_index")
+        .eq("meeting_id", data.meetingId)
+        .order("segment_index", { ascending: true }),
+    ]);
+
+    const userIds = new Set<string>();
+    (attendeesRaw ?? []).forEach((a: any) => a.user_id && userIds.add(a.user_id));
+    (motions ?? []).forEach((m: any) => {
+      if (m.moved_by) userIds.add(m.moved_by);
+      if (m.seconded_by) userIds.add(m.seconded_by);
+    });
+    (reportsRaw ?? []).forEach((r: any) => r.user_id && userIds.add(r.user_id));
+
+    const { data: usersRows } = userIds.size
+      ? await supabase.from("users").select("id, name").in("id", Array.from(userIds))
+      : { data: [] as { id: string; name: string }[] };
+    const nameOf = (id: string | null | undefined) =>
+      (id && usersRows?.find((u: any) => u.id === id)?.name) || "Unknown";
+
+    const attendanceLines = (attendeesRaw ?? []).map(
+      (a: any) => `- ${nameOf(a.user_id)}: ${a.present ? "Present" : "Absent"}`,
+    );
+    const reportLines = (reportsRaw ?? []).map(
+      (r: any) =>
+        `- ${nameOf(r.user_id)}${r.bank_balance != null ? ` [Bank balance: $${r.bank_balance}]` : ""}: ${r.report_text}`,
+    );
+    const motionBlocks = (motions ?? []).map((m: any, i: number) => {
+      return `Motion ${i + 1} (VERBATIM — do not alter):
+"${m.motion_text}"
+Moved by: ${nameOf(m.moved_by)}
+Seconded by: ${nameOf(m.seconded_by)}
+Vote: ${m.vote_for ?? 0} for, ${m.vote_against ?? 0} against, ${m.vote_abstain ?? 0} abstain
+Result: ${m.result ?? "(not recorded)"}`;
+    });
+    const transcriptText = (segments ?? [])
+      .map((s: any) => `${s.speaker ?? "Unknown"}: ${s.text}`)
+      .join("\n");
+
+    const userMessage = `Organization: ${org?.name ?? "Organization"}
+Meeting: ${meeting.title}
+Date: ${meeting.meeting_date.slice(0, 10)}
+Type: ${meeting.meeting_type}
+Quorum required: ${meeting.quorum_required}
+Quorum met: ${meeting.quorum_met ? "Yes" : "No"}
+
+Attendance:
+${attendanceLines.join("\n") || "(none recorded)"}
+
+Officer reports:
+${reportLines.join("\n") || "(none submitted)"}
+
+Motions (reproduce each motion text VERBATIM in the minutes):
+${motionBlocks.join("\n\n") || "(no motions recorded)"}
+
+Transcript (use only for brief, factual discussion summaries):
+${transcriptText || "(no transcript available)"}
+
+Produce the formal meeting minutes as plain text. Include sections: Call to Order, Attendance & Quorum, Approval of Previous Minutes, Officer Reports, Business / Motions (with each motion verbatim, mover, seconder, vote, result), Discussion (brief), Adjournment.`;
+
+    const { openaiChat, MINUTES_SYSTEM_PROMPT } = await import("./openai.server");
+    const draft = await openaiChat({ system: MINUTES_SYSTEM_PROMPT, user: userMessage });
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
+      .from("minutes")
+      .upsert(
+        {
+          meeting_id: data.meetingId,
+          ai_draft_text: draft,
+          ai_draft_created_at: new Date().toISOString(),
+        } as never,
+        { onConflict: "meeting_id" },
+      );
+    await supabaseAdmin
+      .from("meetings")
+      .update({ status: "minutes_draft" })
+      .eq("id", data.meetingId);
+    return { draft };
+  });
+
+export const approveMinutes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string; approvedText: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await loadMeetingForAdmin(supabase, userId, data.meetingId);
+    if (!data.approvedText.trim()) throw new Error("Approved minutes text is required.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Audit-log diff vs the prior approved text (if any).
+    const { data: prior } = await supabaseAdmin
+      .from("minutes")
+      .select("id, approved_text, ai_draft_text")
+      .eq("meeting_id", data.meetingId)
+      .maybeSingle();
+    const original = (prior?.approved_text ?? prior?.ai_draft_text ?? "") as string;
+
+    const { data: upserted, error: upErr } = await supabaseAdmin
+      .from("minutes")
+      .upsert(
+        {
+          meeting_id: data.meetingId,
+          approved_text: data.approvedText,
+          approved_by: userId,
+          approved_at: new Date().toISOString(),
+        } as never,
+        { onConflict: "meeting_id" },
+      )
+      .select("id")
+      .single();
+    if (upErr) throw upErr;
+
+    if (original && original !== data.approvedText && upserted?.id) {
+      await supabaseAdmin.from("minutes_edits").insert({
+        minutes_id: upserted.id,
+        edited_by: userId,
+        original_text: original,
+        corrected_text: data.approvedText,
+      } as never);
+    }
+    return { ok: true };
+  });
