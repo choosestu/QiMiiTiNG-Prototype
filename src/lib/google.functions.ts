@@ -11,7 +11,13 @@ function getOrigin(): string {
 }
 
 async function ensureAdmin(supabase: any, userId: string, orgId: string) {
-  const { data } = await supabase.rpc("is_admin", { _user_id: userId });
+  const { data } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["chair", "secretary"])
+    .limit(1)
+    .maybeSingle();
   if (!data) throw new Error("Admin role required.");
   return orgId;
 }
@@ -27,12 +33,12 @@ export const getGoogleStatus = createServerFn({ method: "GET" })
       .maybeSingle();
     if (!profile?.organization_id) return { connected: false, email: null };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: org } = await supabaseAdmin
-      .from("organizations")
+    const { data: secret } = await supabaseAdmin
+      .from("organization_secrets")
       .select("google_oauth_tokens")
-      .eq("id", profile.organization_id)
+      .eq("organization_id", profile.organization_id)
       .maybeSingle();
-    const tok = org?.google_oauth_tokens as { access_token?: string; email?: string } | null;
+    const tok = secret?.google_oauth_tokens as { access_token?: string; email?: string } | null;
     return { connected: Boolean(tok?.access_token), email: tok?.email ?? null };
   });
 
@@ -71,9 +77,9 @@ export const disconnectGoogle = createServerFn({ method: "POST" })
     await ensureAdmin(supabase, userId, profile.organization_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
-      .from("organizations")
+      .from("organization_secrets")
       .update({ google_oauth_tokens: null })
-      .eq("id", profile.organization_id);
+      .eq("organization_id", profile.organization_id);
     return { ok: true };
   });
 

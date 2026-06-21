@@ -421,12 +421,39 @@ export type Database = {
           },
         ]
       }
+      organization_secrets: {
+        Row: {
+          fieldy_api_key_encrypted: string | null
+          google_oauth_tokens: Json | null
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          fieldy_api_key_encrypted?: string | null
+          google_oauth_tokens?: Json | null
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          fieldy_api_key_encrypted?: string | null
+          google_oauth_tokens?: Json | null
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_secrets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
-          fieldy_api_key_encrypted: string | null
           gmail_address: string | null
-          google_oauth_tokens: Json | null
           id: string
           name: string
           quorum_required: number
@@ -434,9 +461,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          fieldy_api_key_encrypted?: string | null
           gmail_address?: string | null
-          google_oauth_tokens?: Json | null
           id?: string
           name: string
           quorum_required?: number
@@ -444,9 +469,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          fieldy_api_key_encrypted?: string | null
           gmail_address?: string | null
-          google_oauth_tokens?: Json | null
           id?: string
           name?: string
           quorum_required?: number
