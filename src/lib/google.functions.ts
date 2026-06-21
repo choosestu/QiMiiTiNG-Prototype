@@ -104,55 +104,20 @@ async function generateAgendaText(args: {
   reports: { name: string; role: string; bank_balance: number | null; report_text: string }[];
   previousMotions: string[];
 }): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  const prompt = `You are the secretary for ${args.org.name}. Draft a clear, formal agenda for the upcoming "${args.meeting.meeting_type}" meeting titled "${args.meeting.title}" on ${args.meeting.meeting_date.slice(0, 10)}.
+  const { openaiChat, AGENDA_SYSTEM_PROMPT } = await import("./openai.server");
+  const userMessage = `Organization: ${args.org.name}
+Meeting title: ${args.meeting.title}
+Meeting type: ${args.meeting.meeting_type}
+Meeting date: ${args.meeting.meeting_date.slice(0, 10)}
 
-Use this Robert's-Rules-of-Order style structure with numbered sections:
-1. Call to Order
-2. Roll Call / Establishment of Quorum
-3. Approval of Previous Minutes
-4. Officer Reports (summarize submitted reports below)
-5. Old Business
-6. New Business
-7. Announcements
-8. Adjournment
-
-Officer reports submitted:
+Officer reports submitted (use only these — do not invent items):
 ${args.reports.map((r) => `- ${r.name} (${r.role})${r.bank_balance != null ? ` [Balance: $${r.bank_balance}]` : ""}: ${r.report_text}`).join("\n") || "(none submitted)"}
 
-Outstanding items from prior meetings:
+Business arising from prior meetings:
 ${args.previousMotions.join("\n") || "(none)"}
 
-Return only the agenda body as plain text with section headings on their own lines. Do not use markdown.`;
-
-  if (!apiKey) {
-    return [
-      "1. Call to Order",
-      "2. Roll Call / Establishment of Quorum",
-      "3. Approval of Previous Minutes",
-      "4. Officer Reports",
-      ...args.reports.map((r) => `   - ${r.name} (${r.role})`),
-      "5. Old Business",
-      "6. New Business",
-      "7. Announcements",
-      "8. Adjournment",
-    ].join("\n");
-  }
-
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: "You draft formal meeting agendas in Robert's Rules style." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`AI agenda generation failed: ${await res.text()}`);
-  const j = (await res.json()) as { choices: { message: { content: string } }[] };
-  return j.choices[0]?.message?.content?.trim() ?? "(empty)";
+Produce only the agenda body as plain text, using the required section headings on their own lines. Do not use markdown.`;
+  return openaiChat({ system: AGENDA_SYSTEM_PROMPT, user: userMessage });
 }
 
 export const generateAgenda = createServerFn({ method: "POST" })
