@@ -89,10 +89,11 @@ function MeetingPage() {
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [motions, setMotions] = useState<Motion[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [m, a, mo] = await Promise.all([
+    const [m, a, mo, rp] = await Promise.all([
       supabase.from("meetings").select("*").eq("id", meetingId).maybeSingle(),
       supabase.from("attendees").select("id, user_id, present").eq("meeting_id", meetingId),
       supabase
@@ -100,11 +101,16 @@ function MeetingPage() {
         .select("*")
         .eq("meeting_id", meetingId)
         .order("created_at", { ascending: true }),
+      supabase
+        .from("officer_reports")
+        .select("id, user_id, report_text, bank_balance, submitted_at")
+        .eq("meeting_id", meetingId),
     ]);
     if (m.error) toast.error(m.error.message);
     if (m.data) setMeeting(m.data as Meeting);
     if (a.data) setAttendees(a.data as Attendee[]);
     if (mo.data) setMotions(mo.data as Motion[]);
+    if (rp.data) setReports(rp.data as Report[]);
   }, [meetingId]);
 
   useEffect(() => {
