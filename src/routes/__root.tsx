@@ -142,9 +142,16 @@ function RootComponent() {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+      if (event === "SIGNED_OUT") {
+        // Re-run beforeLoad guards so protected routes redirect to /auth.
+        router.invalidate();
+      } else if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        // Invalidate query cache so fresh data loads, but do NOT call
+        // router.invalidate() — SIGNED_IN fires on every page load for an
+        // existing session and would blank the route tree mid-render while
+        // TanStack Router re-runs beforeLoad.
+        queryClient.invalidateQueries();
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [router, queryClient]);
