@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["bun"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["bun install"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["bun run build"]
 
 [start]
 cmd = "node .output/server/index.mjs"
