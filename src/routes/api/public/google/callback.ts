@@ -25,17 +25,16 @@ export const Route = createFileRoute("/api/public/google/callback")({
 
         // Preserve existing refresh_token if Google omits it (already granted previously).
         const { data: existing } = await supabaseAdmin
-          .from("organizations")
+          .from("organization_secrets")
           .select("google_oauth_tokens")
-          .eq("id", parsed.orgId)
+          .eq("organization_id", parsed.orgId)
           .maybeSingle();
         const prev = (existing?.google_oauth_tokens ?? {}) as { refresh_token?: string };
         const merged = { ...tokens, refresh_token: tokens.refresh_token ?? prev.refresh_token };
 
         await supabaseAdmin
-          .from("organizations")
-          .update({ google_oauth_tokens: merged as never })
-          .eq("id", parsed.orgId);
+          .from("organization_secrets")
+          .upsert({ organization_id: parsed.orgId, google_oauth_tokens: merged as never }, { onConflict: "organization_id" });
 
         return new Response(null, {
           status: 302,
