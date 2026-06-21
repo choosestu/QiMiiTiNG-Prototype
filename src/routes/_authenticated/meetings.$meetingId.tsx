@@ -209,7 +209,7 @@ function MeetingPage() {
   const allValid = validations.every((v) => v.ok);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:py-8">
       <Button variant="ghost" size="sm" asChild>
         <Link to="/dashboard">
           <ArrowLeft className="mr-1 h-4 w-4" />
@@ -217,16 +217,16 @@ function MeetingPage() {
         </Link>
       </Button>
 
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl">{meeting.title}</h1>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:flex-wrap sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate font-serif text-2xl sm:text-3xl">{meeting.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {format(new Date(meeting.meeting_date + "T00:00:00"), "PPPP")} ·{" "}
             {meeting.meeting_type.replace("_", " ")}
             {meeting.fieldy_enabled && " · Fieldy enabled"}
           </p>
         </div>
-        <Badge variant="secondary" className="text-sm">
+        <Badge variant="secondary" className="shrink-0 text-sm">
           {STATUS_LABEL[meeting.status]}
         </Badge>
       </header>
@@ -243,28 +243,35 @@ function MeetingPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {users.map((u) => {
-            const a = attendees.find((x) => x.user_id === u.id);
-            const present = a?.present ?? false;
-            return (
-              <label
-                key={u.id}
-                className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2"
-              >
-                <span className="text-sm">
-                  {u.name}
-                  <span className="ml-2 text-xs text-muted-foreground">{u.email}</span>
-                </span>
-                <Checkbox
-                  checked={present}
-                  disabled={!editable || busy}
-                  onCheckedChange={(v) => toggleAttendance(u.id, !!v)}
-                />
-              </label>
-            );
-          })}
+          {users.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+              No officers found in this organization yet.
+            </p>
+          ) : (
+            users.map((u) => {
+              const a = attendees.find((x) => x.user_id === u.id);
+              const present = a?.present ?? false;
+              return (
+                <label
+                  key={u.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="block truncate">{u.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{u.email}</span>
+                  </span>
+                  <Checkbox
+                    checked={present}
+                    disabled={!editable || busy}
+                    onCheckedChange={(v) => toggleAttendance(u.id, !!v)}
+                  />
+                </label>
+              );
+            })
+          )}
         </CardContent>
       </Card>
+
 
       <ReportsCard
         meeting={meeting}
