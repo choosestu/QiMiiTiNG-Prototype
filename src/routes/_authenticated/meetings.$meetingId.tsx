@@ -90,6 +90,7 @@ const STATUS_LABEL: Record<string, string> = {
   adjourned: "Adjourned",
   minutes_draft: "Minutes draft",
   minutes_approved: "Minutes approved",
+  cancelled: "Cancelled",
 };
 
 function MeetingPage() {
@@ -192,7 +193,7 @@ function MeetingPage() {
   };
 
   const transition = async (
-    next: "scheduled" | "reports_open" | "agenda_generated" | "in_progress" | "adjourned" | "minutes_draft" | "minutes_approved",
+    next: "scheduled" | "reports_open" | "agenda_generated" | "in_progress" | "adjourned" | "minutes_draft" | "minutes_approved" | "cancelled",
   ) => {
     setBusy(true);
     const patch: Record<string, unknown> = { status: next, quorum_met: quorumMet };
@@ -225,6 +226,15 @@ function MeetingPage() {
     },
   ];
   const allValid = validations.every((v) => v.ok);
+  const canCancel =
+    isAdmin &&
+    !["adjourned", "minutes_draft", "minutes_approved", "cancelled"].includes(meeting.status);
+
+  const onCancelMeeting = () => {
+    if (confirm(`Cancel "${meeting.title}"? This marks the meeting cancelled — it is not deleted, and the record is kept.`)) {
+      transition("cancelled");
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:py-8">
@@ -244,9 +254,19 @@ function MeetingPage() {
             {meeting.fieldy_enabled && " · Fieldy enabled"}
           </p>
         </div>
-        <Badge variant="secondary" className="shrink-0 text-sm">
-          {STATUS_LABEL[meeting.status]}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          {canCancel && (
+            <Button variant="outline" size="sm" disabled={busy} onClick={onCancelMeeting}>
+              Cancel meeting
+            </Button>
+          )}
+          <Badge
+            variant={meeting.status === "cancelled" ? "destructive" : "secondary"}
+            className="text-sm"
+          >
+            {STATUS_LABEL[meeting.status]}
+          </Badge>
+        </div>
       </header>
 
       <Card>

@@ -14,10 +14,11 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings.index'
+import { Route as ApiAdminBootstrapRouteImport } from './routes/api/admin/bootstrap'
 import { Route as AuthenticatedSettingsAllowlistRouteImport } from './routes/_authenticated/settings.allowlist'
 import { Route as AuthenticatedMeetingsMeetingIdRouteImport } from './routes/_authenticated/meetings.$meetingId'
 import { Route as ApiPublicGoogleCallbackRouteImport } from './routes/api/public/google/callback'
-import { Route as ApiAdminBootstrapRouteImport } from './routes/api/admin/bootstrap'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -43,6 +44,17 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSettingsIndexRoute =
+  AuthenticatedSettingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
+const ApiAdminBootstrapRoute = ApiAdminBootstrapRouteImport.update({
+  id: '/api/admin/bootstrap',
+  path: '/api/admin/bootstrap',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedSettingsAllowlistRoute =
   AuthenticatedSettingsAllowlistRouteImport.update({
     id: '/allowlist',
@@ -61,12 +73,6 @@ const ApiPublicGoogleCallbackRoute = ApiPublicGoogleCallbackRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 
-const ApiAdminBootstrapRoute = ApiAdminBootstrapRouteImport.update({
-  id: '/api/admin/bootstrap',
-  path: '/api/admin/bootstrap',
-  getParentRoute: () => rootRouteImport,
-} as any)
-
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
@@ -74,15 +80,18 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
+  '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
+  '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
+  '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
+  '/settings': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
 }
 export interface FileRoutesById {
@@ -94,6 +103,8 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/_authenticated/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/_authenticated/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
+  '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
+  '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
 }
 export interface FileRouteTypes {
@@ -105,15 +116,18 @@ export interface FileRouteTypes {
     | '/settings'
     | '/meetings/$meetingId'
     | '/settings/allowlist'
+    | '/api/admin/bootstrap'
+    | '/settings/'
     | '/api/public/google/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/dashboard'
-    | '/settings'
     | '/meetings/$meetingId'
     | '/settings/allowlist'
+    | '/api/admin/bootstrap'
+    | '/settings'
     | '/api/public/google/callback'
   id:
     | '__root__'
@@ -124,6 +138,8 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/meetings/$meetingId'
     | '/_authenticated/settings/allowlist'
+    | '/api/admin/bootstrap'
+    | '/_authenticated/settings/'
     | '/api/public/google/callback'
   fileRoutesById: FileRoutesById
 }
@@ -131,8 +147,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ApiPublicGoogleCallbackRoute: typeof ApiPublicGoogleCallbackRoute
   ApiAdminBootstrapRoute: typeof ApiAdminBootstrapRoute
+  ApiPublicGoogleCallbackRoute: typeof ApiPublicGoogleCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -172,6 +188,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings/': {
+      id: '/_authenticated/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
+    }
+    '/api/admin/bootstrap': {
+      id: '/api/admin/bootstrap'
+      path: '/api/admin/bootstrap'
+      fullPath: '/api/admin/bootstrap'
+      preLoaderRoute: typeof ApiAdminBootstrapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/settings/allowlist': {
       id: '/_authenticated/settings/allowlist'
       path: '/allowlist'
@@ -198,10 +228,12 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedSettingsRouteChildren {
   AuthenticatedSettingsAllowlistRoute: typeof AuthenticatedSettingsAllowlistRoute
+  AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
 
 const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
   AuthenticatedSettingsAllowlistRoute: AuthenticatedSettingsAllowlistRoute,
+  AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
 }
 
 const AuthenticatedSettingsRouteWithChildren =
@@ -228,9 +260,19 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ApiPublicGoogleCallbackRoute: ApiPublicGoogleCallbackRoute,
   ApiAdminBootstrapRoute: ApiAdminBootstrapRoute,
+  ApiPublicGoogleCallbackRoute: ApiPublicGoogleCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

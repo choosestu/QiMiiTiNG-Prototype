@@ -64,6 +64,7 @@ const STATUS_LABEL: Record<string, string> = {
   adjourned: "Adjourned",
   minutes_draft: "Minutes draft",
   minutes_approved: "Minutes approved",
+  cancelled: "Cancelled",
 };
 
 function DashboardPage() {

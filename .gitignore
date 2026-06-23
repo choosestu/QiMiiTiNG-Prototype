@@ -20,6 +20,13 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Local secrets — NEVER commit
+.sbtoken.txt
+.newpass.txt
+
+# Project uses bun (bun.lock); ignore npm's lockfile if it appears
+package-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
