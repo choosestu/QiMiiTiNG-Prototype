@@ -4,9 +4,10 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "bunx vinxi dev",
+    "dev": "vite dev --port 8080",
     "build": "vite build",
     "start": "node .output/server/index.mjs",
+    "build:dev": "vite build",
     "build:lovable": "vite build",
     "lint": "eslint .",
     "format": "prettier --write ."

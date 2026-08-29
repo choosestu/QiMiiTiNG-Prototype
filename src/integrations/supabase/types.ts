@@ -14,6 +14,64 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_items: {
+        Row: {
+          created_at: string
+          description: string
+          due_date: string | null
+          id: string
+          meeting_id: string | null
+          organization_id: string
+          position_id: string | null
+          status: Database["public"]["Enums"]["action_item_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          due_date?: string | null
+          id?: string
+          meeting_id?: string | null
+          organization_id: string
+          position_id?: string | null
+          status?: Database["public"]["Enums"]["action_item_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          due_date?: string | null
+          id?: string
+          meeting_id?: string | null
+          organization_id?: string
+          position_id?: string | null
+          status?: Database["public"]["Enums"]["action_item_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_items_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_items_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       allowed_users: {
         Row: {
           email: string
@@ -78,6 +136,115 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      correspondence: {
+        Row: {
+          body: string | null
+          counterparty: string | null
+          created_at: string
+          direction: Database["public"]["Enums"]["correspondence_direction"]
+          id: string
+          occurred_at: string
+          organization_id: string
+          position_id: string | null
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          counterparty?: string | null
+          created_at?: string
+          direction?: Database["public"]["Enums"]["correspondence_direction"]
+          id?: string
+          occurred_at?: string
+          organization_id: string
+          position_id?: string | null
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          counterparty?: string | null
+          created_at?: string
+          direction?: Database["public"]["Enums"]["correspondence_direction"]
+          id?: string
+          occurred_at?: string
+          organization_id?: string
+          position_id?: string | null
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "correspondence_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "correspondence_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      election_proposals: {
+        Row: {
+          created_at: string
+          id: string
+          meeting_id: string | null
+          organization_id: string
+          position_id: string | null
+          proposed_holder_name: string | null
+          source_excerpt: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meeting_id?: string | null
+          organization_id: string
+          position_id?: string | null
+          proposed_holder_name?: string | null
+          source_excerpt?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meeting_id?: string | null
+          organization_id?: string
+          position_id?: string | null
+          proposed_holder_name?: string | null
+          source_excerpt?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "election_proposals_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "election_proposals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "election_proposals_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
             referencedColumns: ["id"]
           },
         ]
@@ -305,6 +472,45 @@ export type Database = {
           },
         ]
       }
+      motion_votes: {
+        Row: {
+          id: string
+          motion_id: string
+          user_id: string
+          vote: Database["public"]["Enums"]["vote_choice"]
+          voted_at: string
+        }
+        Insert: {
+          id?: string
+          motion_id: string
+          user_id: string
+          vote: Database["public"]["Enums"]["vote_choice"]
+          voted_at?: string
+        }
+        Update: {
+          id?: string
+          motion_id?: string
+          user_id?: string
+          vote?: Database["public"]["Enums"]["vote_choice"]
+          voted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "motion_votes_motion_id_fkey"
+            columns: ["motion_id"]
+            isOneToOne: false
+            referencedRelation: "motions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "motion_votes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       motions: {
         Row: {
           created_at: string
@@ -317,6 +523,9 @@ export type Database = {
           vote_abstain: number
           vote_against: number
           vote_for: number
+          voting_closes_at: string | null
+          voting_mode: string
+          voting_opens_at: string | null
         }
         Insert: {
           created_at?: string
@@ -329,6 +538,9 @@ export type Database = {
           vote_abstain?: number
           vote_against?: number
           vote_for?: number
+          voting_closes_at?: string | null
+          voting_mode?: string
+          voting_opens_at?: string | null
         }
         Update: {
           created_at?: string
@@ -341,6 +553,9 @@ export type Database = {
           vote_abstain?: number
           vote_against?: number
           vote_for?: number
+          voting_closes_at?: string | null
+          voting_mode?: string
+          voting_opens_at?: string | null
         }
         Relationships: [
           {
@@ -477,6 +692,280 @@ export type Database = {
         }
         Relationships: []
       }
+      position_contacts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          org_affiliation: string | null
+          organization_id: string
+          phone: string | null
+          position_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          org_affiliation?: string | null
+          organization_id: string
+          phone?: string | null
+          position_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          org_affiliation?: string | null
+          organization_id?: string
+          phone?: string | null
+          position_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "position_contacts_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      position_handover_notes: {
+        Row: {
+          author_name: string | null
+          author_user_id: string
+          created_at: string
+          id: string
+          note_text: string
+          organization_id: string
+          position_id: string
+        }
+        Insert: {
+          author_name?: string | null
+          author_user_id: string
+          created_at?: string
+          id?: string
+          note_text: string
+          organization_id: string
+          position_id: string
+        }
+        Update: {
+          author_name?: string | null
+          author_user_id?: string
+          created_at?: string
+          id?: string
+          note_text?: string
+          organization_id?: string
+          position_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_handover_notes_author_user_id_fkey"
+            columns: ["author_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "position_handover_notes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "position_handover_notes_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      position_holders: {
+        Row: {
+          assigned_via: Database["public"]["Enums"]["assigned_via"]
+          created_at: string
+          current_login_user_id: string | null
+          forwarding_email: string | null
+          holder_name: string
+          id: string
+          organization_id: string
+          phone: string | null
+          portal_status: Database["public"]["Enums"]["portal_status"]
+          position_id: string
+          term_end: string | null
+          term_start: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_via?: Database["public"]["Enums"]["assigned_via"]
+          created_at?: string
+          current_login_user_id?: string | null
+          forwarding_email?: string | null
+          holder_name: string
+          id?: string
+          organization_id: string
+          phone?: string | null
+          portal_status?: Database["public"]["Enums"]["portal_status"]
+          position_id: string
+          term_end?: string | null
+          term_start?: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_via?: Database["public"]["Enums"]["assigned_via"]
+          created_at?: string
+          current_login_user_id?: string | null
+          forwarding_email?: string | null
+          holder_name?: string
+          id?: string
+          organization_id?: string
+          phone?: string | null
+          portal_status?: Database["public"]["Enums"]["portal_status"]
+          position_id?: string
+          term_end?: string | null
+          term_start?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_holders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "position_holders_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      position_portal_invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          organization_id: string
+          position_holder_id: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          organization_id: string
+          position_holder_id: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          position_holder_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_portal_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "position_portal_invitations_position_holder_id_fkey"
+            columns: ["position_holder_id"]
+            isOneToOne: false
+            referencedRelation: "position_holders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      positions: {
+        Row: {
+          auto_succeeds_position_id: string | null
+          brief: string | null
+          category: Database["public"]["Enums"]["position_category"]
+          created_at: string
+          default_app_role: Database["public"]["Enums"]["app_role"]
+          display_order: number
+          id: string
+          organization_id: string
+          role_email: string | null
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          auto_succeeds_position_id?: string | null
+          brief?: string | null
+          category?: Database["public"]["Enums"]["position_category"]
+          created_at?: string
+          default_app_role?: Database["public"]["Enums"]["app_role"]
+          display_order?: number
+          id?: string
+          organization_id: string
+          role_email?: string | null
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          auto_succeeds_position_id?: string | null
+          brief?: string | null
+          category?: Database["public"]["Enums"]["position_category"]
+          created_at?: string
+          default_app_role?: Database["public"]["Enums"]["app_role"]
+          display_order?: number
+          id?: string
+          organization_id?: string
+          role_email?: string | null
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "positions_auto_succeeds_position_id_fkey"
+            columns: ["auto_succeeds_position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "positions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transcript_segments: {
         Row: {
           end_offset: number | null
@@ -591,9 +1080,29 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_position_holder: {
+        Args: { _position_id: string; _user_id: string }
+        Returns: boolean
+      }
+      reassign_position: {
+        Args: {
+          _forwarding_email: string
+          _holder_name: string
+          _phone: string
+          _position_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
+      action_item_status: "open" | "carried_forward" | "done"
       app_role: "chair" | "secretary" | "officer"
+      assigned_via:
+        | "initial_setup"
+        | "agm_election"
+        | "board_appointment"
+        | "manual"
+      correspondence_direction: "inbound" | "outbound"
       meeting_status:
         | "scheduled"
         | "reports_open"
@@ -603,6 +1112,14 @@ export type Database = {
         | "minutes_draft"
         | "minutes_approved"
       motion_result: "carried" | "defeated" | "tabled" | "withdrawn"
+      portal_status: "invitation_pending" | "active" | "revoked"
+      position_category:
+        | "elected_officer"
+        | "appointed_officer"
+        | "director_at_large"
+        | "ex_officio"
+        | "custom"
+      vote_choice: "for" | "against" | "abstain"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -730,7 +1247,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      action_item_status: ["open", "carried_forward", "done"],
       app_role: ["chair", "secretary", "officer"],
+      assigned_via: [
+        "initial_setup",
+        "agm_election",
+        "board_appointment",
+        "manual",
+      ],
+      correspondence_direction: ["inbound", "outbound"],
       meeting_status: [
         "scheduled",
         "reports_open",
@@ -741,6 +1266,15 @@ export const Constants = {
         "minutes_approved",
       ],
       motion_result: ["carried", "defeated", "tabled", "withdrawn"],
+      portal_status: ["invitation_pending", "active", "revoked"],
+      position_category: [
+        "elected_officer",
+        "appointed_officer",
+        "director_at_large",
+        "ex_officio",
+        "custom",
+      ],
+      vote_choice: ["for", "against", "abstain"],
     },
   },
 } as const
