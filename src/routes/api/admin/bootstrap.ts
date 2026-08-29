@@ -91,7 +91,7 @@ export const Route = createFileRoute("/api/admin/bootstrap")({
             // Upsert user_roles row
             const { error: rErr } = await supabaseAdmin.from("user_roles").upsert({
               user_id: authUser.id,
-              role: m.role,
+              role: m.role as "chair" | "secretary" | "officer",
             }, { onConflict: "user_id,role" });
             if (rErr) log.push(`⚠ user_roles upsert failed for ${m.email}: ${rErr.message}`);
             else log.push(`✓ user_roles row ensured for ${m.email} (${m.role})`);
