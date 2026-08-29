@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.reassign_position(uuid, text, text, text) FROM anon;

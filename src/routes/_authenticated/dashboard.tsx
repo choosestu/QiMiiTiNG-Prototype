@@ -135,8 +135,10 @@ function DashboardPage() {
         </div>
       </header>
 
+      <PositionsSummaryCard />
 
       <section className="space-y-4">
+
         <div className="flex items-center justify-between">
           <h2 className="font-serif text-xl">Meetings</h2>
           {isAdmin && (
@@ -303,5 +305,44 @@ function CreateMeetingDialog({
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+function PositionsSummaryCard() {
+  const [counts, setCounts] = useState<{ total: number; filled: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [{ data: pos }, { data: holders }] = await Promise.all([
+        supabase.from("positions").select("id"),
+        supabase.from("position_holders").select("position_id").is("term_end", null),
+      ]);
+      if (cancelled) return;
+      setCounts({ total: (pos ?? []).length, filled: (holders ?? []).length });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Link to="/positions" className="block">
+      <Card className="transition-colors hover:border-primary/40">
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle className="text-base">Positions</CardTitle>
+            <CardDescription>
+              {counts === null
+                ? "Loading…"
+                : counts.total === 0
+                  ? "No positions set up yet"
+                  : `${counts.filled} of ${counts.total} positions filled`}
+            </CardDescription>
+          </div>
+          <Badge variant="secondary">Open portals</Badge>
+        </CardHeader>
+      </Card>
+    </Link>
   );
 }

@@ -15,8 +15,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings.index'
+import { Route as AuthenticatedPositionsIndexRouteImport } from './routes/_authenticated/positions.index'
 import { Route as ApiAdminBootstrapRouteImport } from './routes/api/admin/bootstrap'
 import { Route as AuthenticatedSettingsAllowlistRouteImport } from './routes/_authenticated/settings.allowlist'
+import { Route as AuthenticatedPositionsPositionIdRouteImport } from './routes/_authenticated/positions.$positionId'
 import { Route as AuthenticatedMeetingsMeetingIdRouteImport } from './routes/_authenticated/meetings.$meetingId'
 import { Route as ApiPublicGoogleCallbackRouteImport } from './routes/api/public/google/callback'
 
@@ -50,6 +52,12 @@ const AuthenticatedSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRoute,
   } as any)
+const AuthenticatedPositionsIndexRoute =
+  AuthenticatedPositionsIndexRouteImport.update({
+    id: '/positions/',
+    path: '/positions/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiAdminBootstrapRoute = ApiAdminBootstrapRouteImport.update({
   id: '/api/admin/bootstrap',
   path: '/api/admin/bootstrap',
@@ -60,6 +68,12 @@ const AuthenticatedSettingsAllowlistRoute =
     id: '/allowlist',
     path: '/allowlist',
     getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
+const AuthenticatedPositionsPositionIdRoute =
+  AuthenticatedPositionsPositionIdRouteImport.update({
+    id: '/positions/$positionId',
+    path: '/positions/$positionId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMeetingsMeetingIdRoute =
   AuthenticatedMeetingsMeetingIdRouteImport.update({
@@ -79,8 +93,10 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
+  '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
   '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
+  '/positions/': typeof AuthenticatedPositionsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
 }
@@ -89,8 +105,10 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
+  '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
   '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
+  '/positions': typeof AuthenticatedPositionsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
 }
@@ -102,8 +120,10 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/_authenticated/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
+  '/_authenticated/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/_authenticated/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
   '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
+  '/_authenticated/positions/': typeof AuthenticatedPositionsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
 }
@@ -115,8 +135,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/meetings/$meetingId'
+    | '/positions/$positionId'
     | '/settings/allowlist'
     | '/api/admin/bootstrap'
+    | '/positions/'
     | '/settings/'
     | '/api/public/google/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -125,8 +147,10 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/meetings/$meetingId'
+    | '/positions/$positionId'
     | '/settings/allowlist'
     | '/api/admin/bootstrap'
+    | '/positions'
     | '/settings'
     | '/api/public/google/callback'
   id:
@@ -137,8 +161,10 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
     | '/_authenticated/meetings/$meetingId'
+    | '/_authenticated/positions/$positionId'
     | '/_authenticated/settings/allowlist'
     | '/api/admin/bootstrap'
+    | '/_authenticated/positions/'
     | '/_authenticated/settings/'
     | '/api/public/google/callback'
   fileRoutesById: FileRoutesById
@@ -195,6 +221,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRoute
     }
+    '/_authenticated/positions/': {
+      id: '/_authenticated/positions/'
+      path: '/positions'
+      fullPath: '/positions/'
+      preLoaderRoute: typeof AuthenticatedPositionsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/admin/bootstrap': {
       id: '/api/admin/bootstrap'
       path: '/api/admin/bootstrap'
@@ -208,6 +241,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/allowlist'
       preLoaderRoute: typeof AuthenticatedSettingsAllowlistRouteImport
       parentRoute: typeof AuthenticatedSettingsRoute
+    }
+    '/_authenticated/positions/$positionId': {
+      id: '/_authenticated/positions/$positionId'
+      path: '/positions/$positionId'
+      fullPath: '/positions/$positionId'
+      preLoaderRoute: typeof AuthenticatedPositionsPositionIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/meetings/$meetingId': {
       id: '/_authenticated/meetings/$meetingId'
@@ -245,12 +285,16 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRouteWithChildren
   AuthenticatedMeetingsMeetingIdRoute: typeof AuthenticatedMeetingsMeetingIdRoute
+  AuthenticatedPositionsPositionIdRoute: typeof AuthenticatedPositionsPositionIdRoute
+  AuthenticatedPositionsIndexRoute: typeof AuthenticatedPositionsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRouteWithChildren,
   AuthenticatedMeetingsMeetingIdRoute: AuthenticatedMeetingsMeetingIdRoute,
+  AuthenticatedPositionsPositionIdRoute: AuthenticatedPositionsPositionIdRoute,
+  AuthenticatedPositionsIndexRoute: AuthenticatedPositionsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
