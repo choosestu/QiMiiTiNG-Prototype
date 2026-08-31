@@ -1,3 +1,13 @@
-DELETE FROM public.user_roles WHERE user_id = (SELECT id FROM auth.users WHERE email = 'stuart@thefoundation.ca');
-DELETE FROM public.users WHERE id = (SELECT id FROM auth.users WHERE email = 'stuart@thefoundation.ca');
-DELETE FROM auth.users WHERE email = 'stuart@thefoundation.ca';
+-- NEUTRALIZED 2026-08-31 — root-cause fix for recurring "Invalid login credentials".
+--
+-- This migration originally ran:
+--   DELETE FROM public.user_roles WHERE user_id = (SELECT id FROM auth.users WHERE email = 'stuart@thefoundation.ca');
+--   DELETE FROM public.users      WHERE id      = (SELECT id FROM auth.users WHERE email = 'stuart@thefoundation.ca');
+--   DELETE FROM auth.users        WHERE email = 'stuart@thefoundation.ca';
+--
+-- Deleting the auth.users row destroys the account's password hash. Because this
+-- migration is unguarded, ANY re-application (db reset / db push / re-sync) wiped
+-- the account again, which surfaced to the user as "Invalid login credentials"
+-- with no password change. The one-time June cleanup it was meant to do is long done.
+-- Statements removed so re-running this migration can never delete a live account.
+SELECT 1;

@@ -1,34 +1,29 @@
 -- Full allowlist reset with real member emails.
--- Wipes all placeholder @example.com entries and any partial real-email
--- entries from earlier migrations, then inserts the authoritative list.
--- Also cleans up any orphaned auth records so affected emails can register fresh.
+-- (Originally also deleted auth.users rows — see neutralized section 1 below.)
 
--- 1. Remove orphaned auth rows for real emails that may exist from failed
---    signup attempts (must happen before allowed_users changes).
-DO $$
-DECLARE
-  emails text[] := ARRAY[
-    'stuart@thefoundation.ca',
-    'oshawafederalliberal@gmail.com',
-    'jacquelinesevers@gmail.com',
-    'a78nicholson@gmail.com',
-    'jeremykolodziej@gmail.com',
-    'hrmcmillan@rogers.com',
-    'hugh.montgomerie@gmail.com',
-    'deborah.nurse@gmail.com',
-    'avril.burns@ddsb.ca',
-    'lockieda@gmail.com'
-  ];
-  e text;
-BEGIN
-  FOREACH e IN ARRAY emails LOOP
-    DELETE FROM public.user_roles WHERE user_id = (SELECT id FROM auth.users WHERE email = e);
-    DELETE FROM public.users      WHERE id      = (SELECT id FROM auth.users WHERE email = e);
-    DELETE FROM auth.users        WHERE email   = e;
-  END LOOP;
-END $$;
+-- 1. NEUTRALIZED 2026-08-31 — root-cause fix for recurring "Invalid login credentials".
+--    This block looped over every member email and ran
+--        DELETE FROM auth.users WHERE email = e;
+--    which destroys each account's password hash. Being unguarded, it wiped ALL
+--    members' logins on every re-application of this migration (db reset / db push /
+--    re-sync) — the exact mechanism behind accounts that "worked yesterday" failing
+--    with "Invalid login credentials" today. Removed. Original block was:
+--
+--    DO $$
+--    DECLARE emails text[] := ARRAY['stuart@thefoundation.ca', 'oshawafederalliberal@gmail.com', ...];
+--            e text;
+--    BEGIN
+--      FOREACH e IN ARRAY emails LOOP
+--        DELETE FROM public.user_roles WHERE user_id = (SELECT id FROM auth.users WHERE email = e);
+--        DELETE FROM public.users      WHERE id      = (SELECT id FROM auth.users WHERE email = e);
+--        DELETE FROM auth.users        WHERE email   = e;
+--      END LOOP;
+--    END $$;
 
--- 2. Replace the entire allowed_users table with the real member list.
+-- 2. Seed the allowed_users table with the real member list (allowlist only —
+--    does not touch auth.users, so it cannot destroy a login).
+--    NOTE: this still clears allowlist rows on re-run; that is a separate, lesser
+--    concern (loss of UI-added members) tracked in ROADMAP.md, not the login bug.
 DELETE FROM public.allowed_users;
 
 INSERT INTO public.allowed_users (email, organization_id, name, role, tier)
@@ -49,6 +44,3 @@ FROM public.organizations o,
   ('lockieda@gmail.com',               'Dave Lockie',               'officer',   2)
 ) AS v(email, name, role, tier)
 WHERE o.name = 'Oshawa Federal Liberal Association';
-
--- 3. Verify
-SELECT email, name, role, tier FROM public.allowed_users ORDER BY tier, role, name;
