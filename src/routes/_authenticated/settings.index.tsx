@@ -145,6 +145,20 @@ function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Password</CardTitle>
+          <CardDescription>
+            Set or change the password you use to sign in with your email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={() => router.navigate({ to: "/settings/password" })}>
+            Set password
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings.index'
 import { Route as AuthenticatedPositionsIndexRouteImport } from './routes/_authenticated/positions.index'
 import { Route as ApiAdminBootstrapRouteImport } from './routes/api/admin/bootstrap'
+import { Route as AuthenticatedSettingsPasswordRouteImport } from './routes/_authenticated/settings.password'
 import { Route as AuthenticatedSettingsAllowlistRouteImport } from './routes/_authenticated/settings.allowlist'
 import { Route as AuthenticatedPositionsPositionIdRouteImport } from './routes/_authenticated/positions.$positionId'
 import { Route as AuthenticatedMeetingsMeetingIdRouteImport } from './routes/_authenticated/meetings.$meetingId'
@@ -63,6 +64,12 @@ const ApiAdminBootstrapRoute = ApiAdminBootstrapRouteImport.update({
   path: '/api/admin/bootstrap',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSettingsPasswordRoute =
+  AuthenticatedSettingsPasswordRouteImport.update({
+    id: '/password',
+    path: '/password',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
 const AuthenticatedSettingsAllowlistRoute =
   AuthenticatedSettingsAllowlistRouteImport.update({
     id: '/allowlist',
@@ -95,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
+  '/settings/password': typeof AuthenticatedSettingsPasswordRoute
   '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
   '/positions/': typeof AuthenticatedPositionsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -107,6 +115,7 @@ export interface FileRoutesByTo {
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
+  '/settings/password': typeof AuthenticatedSettingsPasswordRoute
   '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
   '/positions': typeof AuthenticatedPositionsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -122,6 +131,7 @@ export interface FileRoutesById {
   '/_authenticated/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/_authenticated/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/_authenticated/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
+  '/_authenticated/settings/password': typeof AuthenticatedSettingsPasswordRoute
   '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
   '/_authenticated/positions/': typeof AuthenticatedPositionsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/meetings/$meetingId'
     | '/positions/$positionId'
     | '/settings/allowlist'
+    | '/settings/password'
     | '/api/admin/bootstrap'
     | '/positions/'
     | '/settings/'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/meetings/$meetingId'
     | '/positions/$positionId'
     | '/settings/allowlist'
+    | '/settings/password'
     | '/api/admin/bootstrap'
     | '/positions'
     | '/settings'
@@ -163,6 +175,7 @@ export interface FileRouteTypes {
     | '/_authenticated/meetings/$meetingId'
     | '/_authenticated/positions/$positionId'
     | '/_authenticated/settings/allowlist'
+    | '/_authenticated/settings/password'
     | '/api/admin/bootstrap'
     | '/_authenticated/positions/'
     | '/_authenticated/settings/'
@@ -235,6 +248,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminBootstrapRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/settings/password': {
+      id: '/_authenticated/settings/password'
+      path: '/password'
+      fullPath: '/settings/password'
+      preLoaderRoute: typeof AuthenticatedSettingsPasswordRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
+    }
     '/_authenticated/settings/allowlist': {
       id: '/_authenticated/settings/allowlist'
       path: '/allowlist'
@@ -268,11 +288,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedSettingsRouteChildren {
   AuthenticatedSettingsAllowlistRoute: typeof AuthenticatedSettingsAllowlistRoute
+  AuthenticatedSettingsPasswordRoute: typeof AuthenticatedSettingsPasswordRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
 
 const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
   AuthenticatedSettingsAllowlistRoute: AuthenticatedSettingsAllowlistRoute,
+  AuthenticatedSettingsPasswordRoute: AuthenticatedSettingsPasswordRoute,
   AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
 }
 
