@@ -17,7 +17,6 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings.index'
 import { Route as AuthenticatedPositionsIndexRouteImport } from './routes/_authenticated/positions.index'
-import { Route as ApiAdminBootstrapRouteImport } from './routes/api/admin/bootstrap'
 import { Route as AuthenticatedSettingsPasswordRouteImport } from './routes/_authenticated/settings.password'
 import { Route as AuthenticatedSettingsAllowlistRouteImport } from './routes/_authenticated/settings.allowlist'
 import { Route as AuthenticatedPositionsPositionIdRouteImport } from './routes/_authenticated/positions.$positionId'
@@ -65,11 +64,6 @@ const AuthenticatedPositionsIndexRoute =
     path: '/positions/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const ApiAdminBootstrapRoute = ApiAdminBootstrapRouteImport.update({
-  id: '/api/admin/bootstrap',
-  path: '/api/admin/bootstrap',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedSettingsPasswordRoute =
   AuthenticatedSettingsPasswordRouteImport.update({
     id: '/password',
@@ -110,7 +104,6 @@ export interface FileRoutesByFullPath {
   '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
   '/settings/password': typeof AuthenticatedSettingsPasswordRoute
-  '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
   '/positions/': typeof AuthenticatedPositionsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
@@ -124,7 +117,6 @@ export interface FileRoutesByTo {
   '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
   '/settings/password': typeof AuthenticatedSettingsPasswordRoute
-  '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
   '/positions': typeof AuthenticatedPositionsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
@@ -141,7 +133,6 @@ export interface FileRoutesById {
   '/_authenticated/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/_authenticated/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
   '/_authenticated/settings/password': typeof AuthenticatedSettingsPasswordRoute
-  '/api/admin/bootstrap': typeof ApiAdminBootstrapRoute
   '/_authenticated/positions/': typeof AuthenticatedPositionsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/api/public/google/callback': typeof ApiPublicGoogleCallbackRoute
@@ -158,7 +149,6 @@ export interface FileRouteTypes {
     | '/positions/$positionId'
     | '/settings/allowlist'
     | '/settings/password'
-    | '/api/admin/bootstrap'
     | '/positions/'
     | '/settings/'
     | '/api/public/google/callback'
@@ -172,7 +162,6 @@ export interface FileRouteTypes {
     | '/positions/$positionId'
     | '/settings/allowlist'
     | '/settings/password'
-    | '/api/admin/bootstrap'
     | '/positions'
     | '/settings'
     | '/api/public/google/callback'
@@ -188,7 +177,6 @@ export interface FileRouteTypes {
     | '/_authenticated/positions/$positionId'
     | '/_authenticated/settings/allowlist'
     | '/_authenticated/settings/password'
-    | '/api/admin/bootstrap'
     | '/_authenticated/positions/'
     | '/_authenticated/settings/'
     | '/api/public/google/callback'
@@ -198,7 +186,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ApiAdminBootstrapRoute: typeof ApiAdminBootstrapRoute
   ApiPublicGoogleCallbackRoute: typeof ApiPublicGoogleCallbackRoute
 }
 
@@ -259,13 +246,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/positions/'
       preLoaderRoute: typeof AuthenticatedPositionsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/admin/bootstrap': {
-      id: '/api/admin/bootstrap'
-      path: '/api/admin/bootstrap'
-      fullPath: '/api/admin/bootstrap'
-      preLoaderRoute: typeof ApiAdminBootstrapRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/settings/password': {
       id: '/_authenticated/settings/password'
@@ -347,7 +327,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ApiAdminBootstrapRoute: ApiAdminBootstrapRoute,
   ApiPublicGoogleCallbackRoute: ApiPublicGoogleCallbackRoute,
 }
 export const routeTree = rootRouteImport
