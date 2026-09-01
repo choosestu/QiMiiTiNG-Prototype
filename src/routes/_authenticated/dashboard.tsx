@@ -124,6 +124,9 @@ function DashboardPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/calendar">Calendar</Link>
+          </Button>
           {isAdmin && (
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings">Settings</Link>

@@ -23,6 +23,7 @@ dist-ssr
 # Local secrets — NEVER commit
 .sbtoken.txt
 .newpass.txt
+.google.txt
 
 # Project uses bun (bun.lock); ignore npm's lockfile if it appears
 package-lock.json
