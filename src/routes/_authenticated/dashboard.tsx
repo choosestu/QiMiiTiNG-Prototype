@@ -127,6 +127,9 @@ function DashboardPage() {
           <Button variant="ghost" size="sm" asChild>
             <Link to="/calendar">Calendar</Link>
           </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/chat">Chat</Link>
+          </Button>
           {isAdmin && (
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings">Settings</Link>
