@@ -34,6 +34,7 @@ function ChatPage() {
   const { profile, loading } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
+  const [positionOf, setPositionOf] = useState<Map<string, string>>(new Map());
   const [messages, setMessages] = useState<Message[]>([]);
   const [active, setActive] = useState<Conversation>("group");
   const [draft, setDraft] = useState("");
@@ -69,6 +70,21 @@ function ChatPage() {
       .select("id, name")
       .order("name")
       .then(({ data }) => setMembers(((data ?? []) as Member[]).filter((m) => m.id !== profile.id)));
+    // Map each current position-holder to their position title (positions persist
+    // across AGMs even as the person filling them changes).
+    supabase
+      .from("position_holders")
+      .select("current_login_user_id, positions(title)")
+      .is("term_end", null)
+      .then(({ data }) => {
+        const map = new Map<string, string>();
+        for (const row of (data ?? []) as unknown as { current_login_user_id: string | null; positions: { title: string } | null }[]) {
+          const uid = row.current_login_user_id;
+          const title = row.positions?.title;
+          if (uid && title) map.set(uid, map.has(uid) ? `${map.get(uid)}, ${title}` : title);
+        }
+        setPositionOf(map);
+      });
     void load();
     const t = setInterval(() => void load(), 5000);
     return () => clearInterval(t);
@@ -110,7 +126,12 @@ function ChatPage() {
     void load();
   };
 
-  const title = active === "group" ? "Group — your organization" : nameOf(active);
+  const title =
+    active === "group"
+      ? "Group — your organization"
+      : positionOf.get(active)
+        ? `${nameOf(active)} · ${positionOf.get(active)}`
+        : nameOf(active);
 
   return (
     <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-4xl flex-col px-4 py-4">
@@ -141,11 +162,21 @@ function ChatPage() {
               key={m.id}
               onClick={() => setActive(m.id)}
               className={cn(
-                "block w-full truncate rounded-md px-2 py-2 text-left text-sm",
+                "block w-full rounded-md px-2 py-2 text-left text-sm",
                 active === m.id ? "bg-primary text-primary-foreground" : "hover:bg-muted",
               )}
             >
-              {m.name}
+              <span className="block truncate">{m.name}</span>
+              {positionOf.get(m.id) && (
+                <span
+                  className={cn(
+                    "block truncate text-[11px]",
+                    active === m.id ? "text-primary-foreground/80" : "text-muted-foreground",
+                  )}
+                >
+                  {positionOf.get(m.id)}
+                </span>
+              )}
             </button>
           ))}
         </div>
