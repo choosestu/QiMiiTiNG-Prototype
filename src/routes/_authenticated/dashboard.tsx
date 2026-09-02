@@ -130,6 +130,9 @@ function DashboardPage() {
           <Button variant="ghost" size="sm" asChild>
             <Link to="/chat">Chat</Link>
           </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/assistant">Assistant</Link>
+          </Button>
           {isAdmin && (
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings">Settings</Link>
