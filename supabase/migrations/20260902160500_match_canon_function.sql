@@ -1,5 +1,7 @@
 -- Full-text search over canon_documents for the governance assistant.
--- OR-matches the question's words and ranks documents; returns highlighted snippets.
+-- OR-matches the question's words and ranks documents. Returns the FULL text for
+-- short docs (<=6000 chars, e.g. Robert's Rules summary + QiMiiTiNG guidance) so
+-- exact rules/numbers always reach the assistant; longer docs return highlighted snippets.
 create or replace function public.match_canon(q text)
 returns table(title text, slug text, snippet text, rank real)
 language plpgsql stable security definer set search_path = public as $BODY$
@@ -12,7 +14,9 @@ begin
   tsq := to_tsquery('english', terms);
   return query
     select c.title, c.slug,
-      ts_headline('english', c.body, tsq, 'MaxFragments=3, MinWords=12, MaxWords=40') as snippet,
+      case when length(c.body) <= 6000
+           then c.body
+           else ts_headline('english', c.body, tsq, 'MaxFragments=4, MinWords=15, MaxWords=60') end as snippet,
       ts_rank(to_tsvector('english', c.body), tsq) as rank
     from public.canon_documents c
     where to_tsvector('english', c.body) @@ tsq
