@@ -70,7 +70,11 @@ export const askAssistant = createServerFn({ method: "POST" })
       "(e.g., 'By-law 2', 'Robert's Rules', or 'your records'). " +
       "For questions about previous votes or tasks, use the organization's records. " +
       "If the material provided doesn't cover the question, say so plainly and suggest asking the Chair/Secretary " +
-      "or consulting the LPC — do not invent rules or give legal advice beyond the documents.";
+      "or consulting the LPC — do not invent rules or give legal advice beyond the documents. " +
+      "Always write the word 'Section' in full; never use the section symbol. " +
+      "There are two different quorum rules: executive/board meetings use By-law 2 Section 8.5 " +
+      "(a percentage of officers and directors, not a fixed number), while nomination, officer-election, " +
+      "and general membership meetings use Section 10.7 — apply whichever matches the meeting type in question.";
 
     const user =
       `QUESTION:\n${question}\n\n` +
