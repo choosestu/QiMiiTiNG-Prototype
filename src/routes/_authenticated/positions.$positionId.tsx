@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
 import { PortalStatusBadge, type PortalStatus } from "@/lib/positions";
+import { sendPositionInvite } from "@/lib/positions.functions";
 
 export const Route = createFileRoute("/_authenticated/positions/$positionId")({
   head: () => ({
@@ -225,6 +227,9 @@ function PositionPortalPage() {
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <PortalStatusBadge status={current?.portal_status} />
+          {isAdmin && current && current.forwarding_email && !current.current_login_user_id && (
+            <InviteButton holderId={current.id} />
+          )}
           {isAdmin && <ReassignDialog positionId={position.id} current={current} onDone={refresh} />}
         </div>
       </header>
@@ -822,6 +827,32 @@ function CorrespondenceCard({
   );
 }
 
+function InviteButton({ holderId }: { holderId: string }) {
+  const invite = useServerFn(sendPositionInvite);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const r = await invite({ data: { positionHolderId: holderId } });
+          toast.success(`Invitation sent to ${r.sentTo}`);
+        } catch (e: any) {
+          const m = String(e?.message ?? e);
+          toast.error(m.includes("not connected") ? "Connect Google in Settings first." : m);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <Mail className="mr-1 h-4 w-4" /> {busy ? "Sending…" : "Send invitation"}
+    </Button>
+  );
+}
+
 function ReassignDialog({
   positionId,
   current,
@@ -836,6 +867,7 @@ function ReassignDialog({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
+  const invite = useServerFn(sendPositionInvite);
 
   const submit = async () => {
     if (!name.trim()) {
@@ -843,18 +875,28 @@ function ReassignDialog({
       return;
     }
     setBusy(true);
-    const { error } = await supabase.rpc("reassign_position", {
+    const { data: newHolderId, error } = await supabase.rpc("reassign_position", {
       _position_id: positionId,
       _holder_name: name.trim(),
       _forwarding_email: email.trim(),
       _phone: phone.trim(),
     });
-    setBusy(false);
     if (error) {
+      setBusy(false);
       toast.error(error.message);
       return;
     }
     toast.success("Position reassigned");
+    // Automatically email the new officeholder access + setup instructions.
+    if (email.trim() && newHolderId) {
+      try {
+        const r = await invite({ data: { positionHolderId: newHolderId as string } });
+        toast.success(`Invitation emailed to ${r.sentTo}`);
+      } catch (e: any) {
+        toast.error("Assigned, but the invitation email failed: " + String(e?.message ?? e));
+      }
+    }
+    setBusy(false);
     setName("");
     setEmail("");
     setPhone("");
