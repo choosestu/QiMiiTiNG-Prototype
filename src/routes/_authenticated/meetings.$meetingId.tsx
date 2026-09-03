@@ -1091,7 +1091,7 @@ function ReportsCard({
                   )}
                 </div>
                 {r && (
-                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
                     {r.report_text}
                     {r.bank_balance != null && (
                       <span className="ml-2 font-medium text-foreground">
@@ -1114,6 +1114,30 @@ function ReportsCard({
             </div>
           );
         })}
+        {isAdmin && reportsOpen && reports.length > 0 && (
+          <div className="pt-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={async () => {
+                const { error } = await supabase.from("motions").insert({
+                  organization_id: meeting.organization_id,
+                  meeting_id: meeting.id,
+                  motion_text: "That the officer reports be accepted as presented.",
+                  moved_by: currentUserId,
+                });
+                if (error) {
+                  toast.error(error.message);
+                  return;
+                }
+                toast.success("Motion added. Record the seconder and the vote in the Motions section.");
+                onUpdate();
+              }}
+            >
+              Move to accept the reports
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
