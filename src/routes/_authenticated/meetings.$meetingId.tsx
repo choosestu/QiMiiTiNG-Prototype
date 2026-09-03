@@ -63,7 +63,14 @@ type Meeting = {
 };
 
 type OrgUser = { id: string; name: string; email: string };
-type Attendee = { id: string; user_id: string; present: boolean };
+type AttendanceStatus = "present" | "late" | "regrets" | "absent";
+type Attendee = {
+  id: string;
+  user_id: string;
+  present: boolean;
+  attendance_status: AttendanceStatus;
+  arrived_at: string | null;
+};
 type Motion = {
   id: string;
   motion_text: string;
@@ -111,7 +118,7 @@ function MeetingPage() {
   const refresh = useCallback(async () => {
     const [m, a, mo, rp] = await Promise.all([
       supabase.from("meetings").select("*").eq("id", meetingId).maybeSingle(),
-      supabase.from("attendees").select("id, user_id, present").eq("meeting_id", meetingId),
+      supabase.from("attendees").select("id, user_id, present, attendance_status, arrived_at").eq("meeting_id", meetingId),
       supabase
         .from("motions")
         .select("*")
@@ -236,17 +243,21 @@ function MeetingPage() {
 
   const editable = isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
 
-  const toggleAttendance = async (userId: string, present: boolean) => {
+  const setAttendance = async (userId: string, status: AttendanceStatus) => {
     setBusy(true);
     const existing = attendees.find((a) => a.user_id === userId);
     if (existing) {
+      // Present and Late both count as "in the room" for quorum; keep the present
+      // flag in sync so quorum and other consumers keep working unchanged.
+      const present = status === "present" || status === "late";
+      const arrived_at = status === "late" ? existing.arrived_at ?? new Date().toISOString() : null;
       const { error } = await supabase
         .from("attendees")
-        .update({ present })
+        .update({ attendance_status: status, present, arrived_at })
         .eq("id", existing.id);
       if (error) toast.error(error.message);
       setAttendees((prev) =>
-        prev.map((a) => (a.id === existing.id ? { ...a, present } : a)),
+        prev.map((a) => (a.id === existing.id ? { ...a, attendance_status: status, present, arrived_at } : a)),
       );
     }
     setBusy(false);
@@ -405,22 +416,37 @@ function MeetingPage() {
           ) : (
             users.map((u) => {
               const a = attendees.find((x) => x.user_id === u.id);
-              const present = a?.present ?? false;
+              const status = a?.attendance_status ?? "absent";
               return (
-                <label
+                <div
                   key={u.id}
                   className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
                 >
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="block truncate">{u.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{u.email}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {u.email}
+                      {status === "late" && a?.arrived_at
+                        ? ` · arrived ${format(new Date(a.arrived_at), "h:mm a")}`
+                        : ""}
+                    </span>
                   </span>
-                  <Checkbox
-                    checked={present}
-                    disabled={!editable || busy}
-                    onCheckedChange={(v) => toggleAttendance(u.id, !!v)}
-                  />
-                </label>
+                  <div className="flex shrink-0 flex-wrap gap-1">
+                    {(["present", "late", "regrets", "absent"] as AttendanceStatus[]).map((s) => (
+                      <Button
+                        key={s}
+                        type="button"
+                        size="sm"
+                        variant={status === s ? "default" : "outline"}
+                        disabled={!editable || busy}
+                        className="h-7 px-2 text-xs capitalize"
+                        onClick={() => setAttendance(u.id, s)}
+                      >
+                        {s}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               );
             })
           )}
