@@ -101,9 +101,11 @@ function MeetingPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const [holders, setHolders] = useState<{ user_id: string; category: string }[]>([]);
   const [motions, setMotions] = useState<Motion[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false);
+  const [membershipQuorumConfirmed, setMembershipQuorumConfirmed] = useState(false);
 
   const refresh = useCallback(async () => {
     const [m, a, mo, rp] = await Promise.all([
@@ -134,6 +136,22 @@ function MeetingPage() {
       .select("id, name, email")
       .order("name")
       .then(({ data }) => setUsers((data ?? []) as OrgUser[]));
+    // Current position holders, classified for By-law 2 Section 8.5 quorum.
+    supabase
+      .from("position_holders")
+      .select("current_login_user_id, positions(category)")
+      .is("term_end", null)
+      .then(({ data }) => {
+        const rows = (data ?? []) as unknown as {
+          current_login_user_id: string | null;
+          positions: { category: string } | null;
+        }[];
+        setHolders(
+          rows
+            .filter((r) => r.current_login_user_id && r.positions)
+            .map((r) => ({ user_id: r.current_login_user_id as string, category: r.positions!.category })),
+        );
+      });
   }, [profile, refresh]);
 
   // Ensure an attendee row per org user once meeting + users loaded (admin only, before adjournment).
@@ -152,7 +170,37 @@ function MeetingPage() {
   }, [isAdmin, meeting, users, attendees, meetingId, refresh]);
 
   const presentCount = useMemo(() => attendees.filter((a) => a.present).length, [attendees]);
-  const quorumMet = meeting ? presentCount >= meeting.quorum_required : false;
+
+  // Quorum per LPC By-law 2. Executive/special meetings use Section 8.5 (20% of
+  // voting Directors and Officers AND 50% of the elected officers, excluding
+  // vacancies). AGM/membership meetings use Section 10.7, which depends on riding
+  // membership the app can't count, so the Chair confirms it manually.
+  const quorum = useMemo(() => {
+    const presentIds = new Set(attendees.filter((a) => a.present).map((a) => a.user_id));
+    const votingBoard = new Set(
+      holders
+        .filter((h) => h.category === "elected_officer" || h.category === "director_at_large")
+        .map((h) => h.user_id),
+    );
+    const officers = new Set(holders.filter((h) => h.category === "elected_officer").map((h) => h.user_id));
+    const presentVoting = [...votingBoard].filter((id) => presentIds.has(id)).length;
+    const presentOfficers = [...officers].filter((id) => presentIds.has(id)).length;
+    const reqVoting = Math.ceil(0.2 * votingBoard.size);
+    const reqOfficers = Math.ceil(0.5 * officers.size);
+    const isMembership = meeting?.meeting_type === "agm";
+    const execMet = votingBoard.size > 0 && presentVoting >= reqVoting && presentOfficers >= reqOfficers;
+    return {
+      isMembership,
+      votingBoardTotal: votingBoard.size,
+      officersTotal: officers.size,
+      presentVoting,
+      presentOfficers,
+      reqVoting,
+      reqOfficers,
+      met: isMembership ? membershipQuorumConfirmed : execMet,
+    };
+  }, [attendees, holders, meeting, membershipQuorumConfirmed]);
+  const quorumMet = quorum.met;
 
   if (loading || !profile) {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
@@ -216,7 +264,12 @@ function MeetingPage() {
   const canCallToOrder = meeting.status === "scheduled" || meeting.status === "agenda_generated" || meeting.status === "reports_open";
   const canAdjourn = meeting.status === "in_progress";
   const validations: { label: string; ok: boolean }[] = [
-    { label: `Quorum reached (${presentCount}/${meeting.quorum_required})`, ok: quorumMet },
+    {
+      label: quorum.isMembership
+        ? "Quorum confirmed by Chair (By-law 2 Section 10.7)"
+        : `Quorum met — ${quorum.presentOfficers}/${quorum.officersTotal} officers (need ${quorum.reqOfficers}), ${quorum.presentVoting}/${quorum.votingBoardTotal} voting board (need ${quorum.reqVoting})`,
+      ok: quorumMet,
+    },
     { label: "At least one motion recorded", ok: motions.length > 0 },
     {
       label: "All motions have mover, seconder, and a result",
@@ -273,14 +326,37 @@ function MeetingPage() {
         <CardHeader>
           <CardTitle className="text-base">Attendance</CardTitle>
           <CardDescription>
-            Quorum requires {meeting.quorum_required} officers present. Currently{" "}
-            <span className={quorumMet ? "text-primary font-medium" : "font-medium"}>
-              {presentCount}/{users.length} present
-            </span>
-            .
+            {quorum.isMembership ? (
+              <>
+                Membership / electoral meeting — quorum is the lesser of 10 Registered Liberals in the
+                riding or 20% of them (By-law 2 Section 10.7). QiMiiTiNG can't count riding membership,
+                so the Chair confirms quorum below.
+              </>
+            ) : (
+              <>
+                Executive quorum (By-law 2 Section 8.5): at least 50% of elected officers{" "}
+                <span className={quorum.presentOfficers >= quorum.reqOfficers ? "font-medium text-primary" : "font-medium"}>
+                  ({quorum.presentOfficers}/{quorum.officersTotal}, need {quorum.reqOfficers})
+                </span>{" "}
+                and at least 20% of the voting board{" "}
+                <span className={quorum.presentVoting >= quorum.reqVoting ? "font-medium text-primary" : "font-medium"}>
+                  ({quorum.presentVoting}/{quorum.votingBoardTotal}, need {quorum.reqVoting})
+                </span>
+                . {quorumMet ? "Quorum met." : "Quorum not yet met."}
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
+          {quorum.isMembership && editable && (
+            <label className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <Checkbox
+                checked={membershipQuorumConfirmed}
+                onCheckedChange={(v) => setMembershipQuorumConfirmed(!!v)}
+              />
+              Chair confirms quorum is present (By-law 2 Section 10.7)
+            </label>
+          )}
           {users.length === 0 ? (
             <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
               No officers found in this organization yet.
@@ -378,7 +454,9 @@ function MeetingPage() {
                   <p className="text-muted-foreground">
                     {quorumMet
                       ? "Quorum is met. You can call the meeting to order."
-                      : `Need ${meeting.quorum_required - presentCount} more officer(s) present.`}
+                      : quorum.isMembership
+                        ? "Confirm quorum above to call the meeting to order."
+                        : "Quorum not yet met (By-law 2 Section 8.5)."}
                   </p>
                 </div>
                 <Button onClick={() => transition("in_progress")} disabled={!quorumMet || busy}>
