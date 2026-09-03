@@ -55,6 +55,7 @@ type Meeting = {
   quorum_met: boolean | null;
   fieldy_enabled: boolean;
   agenda_url: string | null;
+  agenda_text: string | null;
   minutes_approved_url: string | null;
   drive_folder_id: string | null;
   conversation_start_time: string | null;
@@ -332,6 +333,35 @@ function MeetingPage() {
           </Badge>
         </div>
       </header>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Agenda</CardTitle>
+          <CardDescription>
+            {meeting.agenda_text || meeting.agenda_url
+              ? "Prepared and circulated ahead of the meeting."
+              : "The agenda has not been prepared yet. It should be generated and sent before the meeting."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {meeting.agenda_text ? (
+            <div className="whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-sm">
+              {meeting.agenda_text}
+            </div>
+          ) : meeting.agenda_url ? (
+            <a
+              href={meeting.agenda_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              <ExternalLink className="size-3" /> Open the agenda (PDF)
+            </a>
+          ) : (
+            <p className="text-sm text-muted-foreground">No agenda yet.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
