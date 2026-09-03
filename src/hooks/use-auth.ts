@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -13,6 +13,42 @@ export interface AppUserProfile {
   roles: AppRole[];
 }
 
+// Demo "View as role" preview. UI-only: it changes which role-gated controls are
+// shown so an admin can experience each role's view. It does not change database
+// permissions. Persisted per browser so the preview applies across pages.
+const VIEW_AS_KEY = "qimiiting_view_as_role";
+let viewAsRole: AppRole | null = readInitialViewAs();
+const viewAsListeners = new Set<() => void>();
+function readInitialViewAs(): AppRole | null {
+  try {
+    const v = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_AS_KEY) : null;
+    return v === "chair" || v === "secretary" || v === "officer" ? v : null;
+  } catch {
+    return null;
+  }
+}
+export function setViewAsRole(role: AppRole | null) {
+  viewAsRole = role;
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (role) localStorage.setItem(VIEW_AS_KEY, role);
+      else localStorage.removeItem(VIEW_AS_KEY);
+    }
+  } catch {
+    /* ignore storage errors */
+  }
+  viewAsListeners.forEach((f) => f());
+}
+function subscribeViewAs(cb: () => void) {
+  viewAsListeners.add(cb);
+  return () => {
+    viewAsListeners.delete(cb);
+  };
+}
+function getViewAs() {
+  return viewAsRole;
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -22,23 +58,21 @@ export function useAuth() {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      // Ignore TOKEN_REFRESHED / INITIAL_SESSION churn — getSession() handles
-      // the initial state; only act on meaningful auth transitions.
+      // Ignore TOKEN_REFRESHED / INITIAL_SESSION churn; getSession() handles the
+      // initial state. Only act on meaningful auth transitions.
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       setSession(s);
       setUser(s?.user ?? null);
-      // On sign-out there is no user, so no profile fetch will run — clear now.
       if (!s?.user) {
         setProfile(null);
         setLoading(false);
+        setViewAsRole(null); // clear any role preview on sign-out
       }
     });
 
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
-      // If there is no session, loading is done immediately.
-      // If there IS a session, loading will be cleared after the profile fetch below.
       if (!data.session?.user) {
         setLoading(false);
       }
@@ -71,8 +105,6 @@ export function useAuth() {
           roles: (r ?? []).map((row) => row.role as AppRole),
         });
       }
-      // Always mark loading done once the profile fetch settles, even if no
-      // public.users row exists — callers check profile === null to detect that.
       setLoading(false);
     })();
     return () => {
@@ -80,11 +112,18 @@ export function useAuth() {
     };
   }, [userId]);
 
-  const isAdmin = !!profile && (profile.roles.includes("chair") || profile.roles.includes("secretary"));
+  const viewAs = useSyncExternalStore(subscribeViewAs, getViewAs, getViewAs);
+  const realRoles = profile?.roles ?? [];
+  const realIsAdmin = !!profile && (realRoles.includes("chair") || realRoles.includes("secretary"));
+  const effectiveRoles: AppRole[] = viewAs ? [viewAs] : realRoles;
+  // Effective admin honours the preview; requires a real profile so a logged-out
+  // state can never appear admin.
+  const isAdmin = !!profile && (viewAs ? viewAs !== "officer" : realIsAdmin);
 
-  return { session, user, profile, loading, isAdmin };
+  return { session, user, profile, loading, isAdmin, realIsAdmin, viewAs, effectiveRoles };
 }
 
 export async function signOut() {
+  setViewAsRole(null);
   await supabase.auth.signOut();
 }
