@@ -101,7 +101,7 @@ function MeetingPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
-  const [holders, setHolders] = useState<{ user_id: string; category: string }[]>([]);
+  const [holders, setHolders] = useState<{ user_id: string; category: string; submits_report: boolean }[]>([]);
   const [motions, setMotions] = useState<Motion[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false);
@@ -139,17 +139,21 @@ function MeetingPage() {
     // Current position holders, classified for By-law 2 Section 8.5 quorum.
     supabase
       .from("position_holders")
-      .select("current_login_user_id, positions(category)")
+      .select("current_login_user_id, positions(category, submits_report)")
       .is("term_end", null)
       .then(({ data }) => {
         const rows = (data ?? []) as unknown as {
           current_login_user_id: string | null;
-          positions: { category: string } | null;
+          positions: { category: string; submits_report: boolean } | null;
         }[];
         setHolders(
           rows
             .filter((r) => r.current_login_user_id && r.positions)
-            .map((r) => ({ user_id: r.current_login_user_id as string, category: r.positions!.category })),
+            .map((r) => ({
+              user_id: r.current_login_user_id as string,
+              category: r.positions!.category,
+              submits_report: r.positions!.submits_report,
+            })),
         );
       });
   }, [profile, refresh]);
@@ -201,6 +205,13 @@ function MeetingPage() {
     };
   }, [attendees, holders, meeting, membershipQuorumConfirmed]);
   const quorumMet = quorum.met;
+
+  // Only these positions submit formal officer reports (per org configuration);
+  // everyone else contributes agenda items instead.
+  const reportingUserIds = useMemo(
+    () => new Set(holders.filter((h) => h.submits_report).map((h) => h.user_id)),
+    [holders],
+  );
 
   if (loading || !profile) {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
@@ -391,6 +402,7 @@ function MeetingPage() {
         meeting={meeting}
         users={users}
         reports={reports}
+        reportingUserIds={reportingUserIds}
         currentUserId={profile.id}
         isAdmin={isAdmin}
         onUpdate={refresh}
@@ -950,6 +962,7 @@ function ReportsCard({
   meeting,
   users,
   reports,
+  reportingUserIds,
   currentUserId,
   isAdmin,
   onUpdate,
@@ -957,6 +970,7 @@ function ReportsCard({
   meeting: Meeting;
   users: OrgUser[];
   reports: Report[];
+  reportingUserIds: Set<string>;
   currentUserId: string;
   isAdmin: boolean;
   onUpdate: () => void;
@@ -967,7 +981,9 @@ function ReportsCard({
     meeting.status === "in_progress";
 
   const myReport = reports.find((r) => r.user_id === currentUserId);
-  const visibleUsers = isAdmin ? users : users.filter((u) => u.id === currentUserId);
+  const reporters = users.filter((u) => reportingUserIds.has(u.id));
+  const isReporter = reportingUserIds.has(currentUserId);
+  const visibleUsers = isAdmin ? reporters : reporters.filter((u) => u.id === currentUserId);
 
   return (
     <Card>
@@ -977,12 +993,12 @@ function ReportsCard({
           {meeting.status === "scheduled"
             ? "Reports submission opens once the chair opens reports."
             : reportsOpen
-              ? "Officers submit a written report for this meeting."
+              ? "The reporting officers submit a written report for this meeting."
               : "Report submission is closed for this meeting."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        {!isAdmin && reportsOpen && (
+        {!isAdmin && reportsOpen && isReporter && (
           <div className="mb-2">
             <ReportDialog
               meetingId={meeting.id}
@@ -993,6 +1009,12 @@ function ReportsCard({
               triggerLabel={myReport ? "Edit my report" : "Submit my report"}
             />
           </div>
+        )}
+        {!isAdmin && !isReporter && (
+          <p className="mb-2 text-sm text-muted-foreground">
+            Formal reports are submitted by the reporting officers. You can raise items during New
+            Business at the meeting.
+          </p>
         )}
         {visibleUsers.map((u) => {
           const r = reports.find((x) => x.user_id === u.id);
