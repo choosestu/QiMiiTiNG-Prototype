@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
+import { splitMeetings } from "@/lib/meetings";
 
 import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
 
@@ -73,10 +74,9 @@ function CalendarPage() {
     [meetings, selected],
   );
 
-  const upcoming = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return meetings.filter((m) => parseDay(m.meeting_date) >= today).slice(0, 8);
+  const { upcoming, past } = useMemo(() => {
+    const { upcoming, past } = splitMeetings(meetings);
+    return { upcoming: upcoming.slice(0, 8), past: past.slice(0, 8) };
   }, [meetings]);
 
   if (loading || !profile) return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
@@ -137,8 +137,15 @@ function CalendarPage() {
 
           {upcoming.length > 0 && (
             <div className="space-y-2">
-              <h2 className="text-sm font-medium text-muted-foreground">Upcoming</h2>
+              <h2 className="text-sm font-medium text-muted-foreground">Upcoming Meetings</h2>
               <div className="space-y-2">{upcoming.map((m) => <MeetingRow key={m.id} m={m} />)}</div>
+            </div>
+          )}
+
+          {past.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-medium text-muted-foreground">Past Meetings</h2>
+              <div className="space-y-2">{past.map((m) => <MeetingRow key={m.id} m={m} />)}</div>
             </div>
           )}
         </div>

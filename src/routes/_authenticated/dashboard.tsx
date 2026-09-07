@@ -31,6 +31,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { splitMeetings } from "@/lib/meetings";
 
 import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
 
@@ -179,32 +180,57 @@ function DashboardPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3">
-            {meetings.map((m) => (
-              <Link
-                key={m.id}
-                to="/meetings/$meetingId"
-                params={{ meetingId: m.id }}
-                className="block"
-              >
-                <Card className="transition-colors hover:border-primary/40">
-                  <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-3">
-                    <div>
-                      <CardTitle className="text-base">{m.title}</CardTitle>
-                      <CardDescription>
-                        {format(new Date(m.meeting_date + "T00:00:00"), "PPP")} ·{" "}
-                        {m.meeting_type.replace("_", " ")}
-                      </CardDescription>
+          (() => {
+            const { upcoming, past } = splitMeetings(meetings);
+            return (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">Upcoming Meetings</h3>
+                  {upcoming.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No upcoming meetings.</p>
+                  ) : (
+                    <div className="grid gap-3">
+                      {upcoming.map((m) => (
+                        <MeetingCard key={m.id} meeting={m} />
+                      ))}
                     </div>
-                    <Badge variant="secondary">{STATUS_LABEL[m.status] ?? m.status}</Badge>
-                  </CardHeader>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                  )}
+                </div>
+                {past.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-muted-foreground">Past Meetings</h3>
+                    <div className="grid gap-3">
+                      {past.map((m) => (
+                        <MeetingCard key={m.id} meeting={m} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
       </section>
     </div>
+  );
+}
+
+function MeetingCard({ meeting: m }: { meeting: Meeting }) {
+  return (
+    <Link to="/meetings/$meetingId" params={{ meetingId: m.id }} className="block">
+      <Card className="transition-colors hover:border-primary/40">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-base">{m.title}</CardTitle>
+            <CardDescription>
+              {format(new Date(m.meeting_date + "T00:00:00"), "PPP")} ·{" "}
+              {m.meeting_type.replace("_", " ")}
+            </CardDescription>
+          </div>
+          <Badge variant="secondary">{STATUS_LABEL[m.status] ?? m.status}</Badge>
+        </CardHeader>
+      </Card>
+    </Link>
   );
 }
 
