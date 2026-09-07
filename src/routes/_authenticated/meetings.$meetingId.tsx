@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, CheckCircle2, Circle, ExternalLink, FileText, Mail, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { generateAgenda, sendMeetingNotice, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
+import { generateAgenda, sendMeetingNotice, sendOfficerReportRequest, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -742,7 +742,7 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
       <CardHeader>
         <CardTitle className="text-base">Google Workspace</CardTitle>
         <CardDescription>
-          Generate the agenda with AI, email the meeting notice, and archive approved minutes to Drive.{" "}
+          Generate the agenda with AI, email a preliminary meeting notice (works before the agenda exists; resend after generating the agenda to include the link), and archive approved minutes to Drive.{" "}
           <Link to="/settings" className="underline">Manage connection</Link>
         </CardDescription>
       </CardHeader>
@@ -758,9 +758,8 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           </Button>
           <Button
             variant="secondary"
-            disabled={busy !== null || !meeting.agenda_url}
+            disabled={busy !== null}
             onClick={() => run("notice", () => sendNotice({ data: { meetingId: meeting.id } }), (r) => `Meeting notice sent to ${r.sent} recipient(s)`)}
-            title={meeting.agenda_url ? undefined : "Generate the agenda first"}
           >
             <Mail className="mr-1 size-4" />
             {busy === "notice" ? "Sending…" : "Send meeting notice"}
@@ -1031,6 +1030,8 @@ function ReportsCard({
   isAdmin: boolean;
   onUpdate: () => void;
 }) {
+  const requestReports = useServerFn(sendOfficerReportRequest);
+  const [requestBusy, setRequestBusy] = useState(false);
   const reportsOpen =
     meeting.status === "reports_open" ||
     meeting.status === "agenda_generated" ||
@@ -1040,6 +1041,21 @@ function ReportsCard({
   const reporters = users.filter((u) => reportingUserIds.has(u.id));
   const isReporter = reportingUserIds.has(currentUserId);
   const visibleUsers = isAdmin ? reporters : reporters.filter((u) => u.id === currentUserId);
+
+  const handleRequestReports = async () => {
+    setRequestBusy(true);
+    try {
+      const r = await requestReports({ data: { meetingId: meeting.id } });
+      toast.success(`Officer report request sent to ${r.sent} recipient(s)`);
+      onUpdate();
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      else toast.error(msg);
+    } finally {
+      setRequestBusy(false);
+    }
+  };
 
   return (
     <Card>
@@ -1114,28 +1130,39 @@ function ReportsCard({
             </div>
           );
         })}
-        {isAdmin && reportsOpen && reports.length > 0 && (
-          <div className="pt-2">
+        {isAdmin && reportsOpen && (
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button
               size="sm"
               variant="secondary"
-              onClick={async () => {
-                const { error } = await supabase.from("motions").insert({
-                  organization_id: meeting.organization_id,
-                  meeting_id: meeting.id,
-                  motion_text: "That the officer reports be accepted as presented.",
-                  moved_by: currentUserId,
-                });
-                if (error) {
-                  toast.error(error.message);
-                  return;
-                }
-                toast.success("Motion added. Record the seconder and the vote in the Motions section.");
-                onUpdate();
-              }}
+              disabled={requestBusy}
+              onClick={handleRequestReports}
             >
-              Move to accept the reports
+              <Mail className="mr-1 size-4" />
+              {requestBusy ? "Sending…" : "Request officer reports"}
             </Button>
+            {reports.length > 0 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={async () => {
+                  const { error } = await supabase.from("motions").insert({
+                    organization_id: meeting.organization_id,
+                    meeting_id: meeting.id,
+                    motion_text: "That the officer reports be accepted as presented.",
+                    moved_by: currentUserId,
+                  });
+                  if (error) {
+                    toast.error(error.message);
+                    return;
+                  }
+                  toast.success("Motion added. Record the seconder and the vote in the Motions section.");
+                  onUpdate();
+                }}
+              >
+                Move to accept the reports
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

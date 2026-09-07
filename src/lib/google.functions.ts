@@ -216,6 +216,8 @@ export const generateAgenda = createServerFn({ method: "POST" })
     return { agendaUrl: webViewLink };
   });
 
+const APP_URL = "https://qimiiting-prototype.up.railway.app";
+
 export const sendMeetingNotice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { meetingId: string }) => data)
@@ -241,14 +243,25 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
       typeof meeting.agenda_url === "string" && /^https:\/\//i.test(meeting.agenda_url)
         ? meeting.agenda_url
         : null;
-    const subject = `[${org?.name ?? "Meeting"}] ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
-    const html = `
+    const subject = safeAgendaUrl
+      ? `[${org?.name ?? "Meeting"}] ${meeting.title} — ${meeting.meeting_date.slice(0, 10)} (Agenda attached)`
+      : `[${org?.name ?? "Meeting"}] Preliminary notice — ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
+    const html = safeAgendaUrl
+      ? `
       <p>You are invited to the upcoming ${esc(meeting.meeting_type)} meeting.</p>
       <p><strong>${esc(meeting.title)}</strong><br/>
       Date: ${esc(meeting.meeting_date.slice(0, 10))}<br/>
       Type: ${esc(meeting.meeting_type)}</p>
-      ${safeAgendaUrl ? `<p>Agenda: <a href="${esc(safeAgendaUrl)}">${esc(safeAgendaUrl)}</a></p>` : ""}
-      <p>Please submit any officer reports in QiMiiTiNG before the meeting.</p>
+      <p>Agenda: <a href="${esc(safeAgendaUrl)}">${esc(safeAgendaUrl)}</a></p>
+      <p>Please submit officer reports in QiMiiTiNG when reports are open, or when you receive a separate report request.</p>
+    `
+      : `
+      <p>This is a <strong>preliminary notice</strong> for the upcoming ${esc(meeting.meeting_type)} meeting.</p>
+      <p><strong>${esc(meeting.title)}</strong><br/>
+      Date: ${esc(meeting.meeting_date.slice(0, 10))}<br/>
+      Type: ${esc(meeting.meeting_type)}</p>
+      <p>The agenda will follow once it is ready. You may receive an updated notice with an agenda link later.</p>
+      <p>Please submit officer reports in QiMiiTiNG when reports are open, or when you receive a separate report request.</p>
     `;
 
     const { sendGmail } = await import("./google.server");
@@ -268,6 +281,110 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
         gmail_message_id: messageId,
       })),
     );
+    return { sent: recipients.length };
+  });
+
+export const sendOfficerReportRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
+    const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
+
+    const { data: holderRows } = await supabase
+      .from("position_holders")
+      .select("current_login_user_id, forwarding_email, positions!inner(submits_report)")
+      .eq("organization_id", orgId)
+      .is("term_end", null)
+      .eq("positions.submits_report", true);
+
+    type Recipient = { email: string; userId: string | null };
+    const recipients: Recipient[] = [];
+    const seenEmails = new Set<string>();
+
+    const addRecipient = (email: string | null | undefined, uid: string | null) => {
+      const e = (email ?? "").trim().toLowerCase();
+      if (!e || seenEmails.has(e)) return;
+      seenEmails.add(e);
+      recipients.push({ email: e, userId: uid });
+    };
+
+    const loginUserIds = (holderRows ?? [])
+      .map((h: any) => h.current_login_user_id as string | null)
+      .filter((id: string | null): id is string => !!id);
+    const { data: loginUsers } = loginUserIds.length
+      ? await supabase.from("users").select("id, email").in("id", loginUserIds)
+      : { data: [] as { id: string; email: string | null }[] };
+    const emailByUserId = new Map((loginUsers ?? []).map((u: any) => [u.id as string, u.email as string | null]));
+
+    for (const h of holderRows ?? []) {
+      const uid = (h as any).current_login_user_id as string | null;
+      const userEmail = uid ? emailByUserId.get(uid) ?? null : null;
+      const fwd = (h as any).forwarding_email as string | null;
+      addRecipient(userEmail || fwd, uid);
+    }
+
+    if (recipients.length === 0) {
+      const { data: roleRows } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("role", ["officer", "chair", "secretary"]);
+      const roleUserIds = [...new Set((roleRows ?? []).map((r: any) => r.user_id as string))];
+      const { data: roleUsers } = roleUserIds.length
+        ? await supabase.from("users").select("id, email").eq("organization_id", orgId).in("id", roleUserIds)
+        : { data: [] as { id: string; email: string | null }[] };
+      for (const u of roleUsers ?? []) {
+        addRecipient((u as any).email, (u as any).id);
+      }
+    }
+
+    if (recipients.length === 0) throw new Error("No recipients with email addresses.");
+
+    const esc = (s: string) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    const subject = `[${org?.name ?? "Meeting"}] Officer reports requested — ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
+    const html = `
+      <p>Officer reports are open for the upcoming meeting.</p>
+      <p><strong>${esc(meeting.title)}</strong><br/>
+      Date: ${esc(meeting.meeting_date.slice(0, 10))}<br/>
+      Type: ${esc(meeting.meeting_type)}</p>
+      <p>Please submit your report in QiMiiTiNG at
+        <a href="${APP_URL}">${APP_URL}</a>.</p>
+    `;
+
+    const { sendGmail } = await import("./google.server");
+    const { messageId } = await sendGmail(orgId, {
+      to: recipients.map((r) => r.email),
+      subject,
+      html,
+    });
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("email_log").insert(
+      recipients.map((r) => ({
+        meeting_id: data.meetingId,
+        organization_id: orgId,
+        recipient_user_id: r.userId,
+        email_type: "officer_report_request",
+        gmail_message_id: messageId,
+      })),
+    );
+
+    const userIds = recipients.map((r) => r.userId).filter((id): id is string => !!id);
+    if (userIds.length > 0) {
+      await supabaseAdmin
+        .from("officer_reports")
+        .update({ reminder_sent_at: new Date().toISOString() })
+        .eq("meeting_id", data.meetingId)
+        .in("user_id", userIds);
+    }
+
     return { sent: recipients.length };
   });
 
