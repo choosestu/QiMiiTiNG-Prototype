@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, CheckCircle2, Circle, ExternalLink, FileText, Mail, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { generateAgenda, sendMeetingNotice, sendOfficerReportRequest, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
+import { generateAgenda, sendMeetingNotice, sendOfficerReportRequest, listMeetingNoticeRecipients, listOfficerReportRequestRecipients, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -716,11 +727,16 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
 
 
 
+
+type EmailRecipientPreview = { id?: string | null; name: string; email: string };
 function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => void }) {
   const genAgenda = useServerFn(generateAgenda);
   const sendNotice = useServerFn(sendMeetingNotice);
+  const listNoticeRecipients = useServerFn(listMeetingNoticeRecipients);
   const uploadMins = useServerFn(uploadApprovedMinutes);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [previewRecipients, setPreviewRecipients] = useState<EmailRecipientPreview[]>([]);
 
   const run = async (key: string, fn: () => Promise<{ agendaUrl?: string; sent?: number; minutesUrl?: string }>, ok: (r: any) => string) => {
     setBusy(key);
@@ -735,6 +751,34 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
     } finally {
       setBusy(null);
     }
+  };
+
+  const openNoticeConfirm = async () => {
+    setBusy("notice-preview");
+    try {
+      const r = await listNoticeRecipients({ data: { meetingId: meeting.id } });
+      if (!r.recipients?.length) {
+        toast.error("No recipients with email addresses.");
+        return;
+      }
+      setPreviewRecipients(r.recipients);
+      setConfirmOpen(true);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      else toast.error(msg);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmSendNotice = () => {
+    setConfirmOpen(false);
+    void run(
+      "notice",
+      () => sendNotice({ data: { meetingId: meeting.id } }),
+      (r) => `Meeting notice sent to ${r.sent} recipient(s)`,
+    );
   };
 
   return (
@@ -759,10 +803,10 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           <Button
             variant="secondary"
             disabled={busy !== null}
-            onClick={() => run("notice", () => sendNotice({ data: { meetingId: meeting.id } }), (r) => `Meeting notice sent to ${r.sent} recipient(s)`)}
+            onClick={() => void openNoticeConfirm()}
           >
             <Mail className="mr-1 size-4" />
-            {busy === "notice" ? "Sending…" : "Send meeting notice"}
+            {busy === "notice" || busy === "notice-preview" ? "Sending…" : "Send meeting notice"}
           </Button>
           <Button
             variant="secondary"
@@ -791,6 +835,29 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           )}
         </div>
       </CardContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send meeting notice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A separate Gmail message will be sent to each of the following {previewRecipients.length} recipient(s). Confirm to send.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-60 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3 text-sm">
+            {previewRecipients.map((r) => (
+              <li key={r.email}>
+                <span className="font-medium text-foreground">{r.name}</span>{" "}
+                <span className="text-muted-foreground">&lt;{r.email}&gt;</span>
+              </li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSendNotice}>Confirm Send</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
@@ -1031,7 +1098,10 @@ function ReportsCard({
   onUpdate: () => void;
 }) {
   const requestReports = useServerFn(sendOfficerReportRequest);
+  const listReportRecipients = useServerFn(listOfficerReportRequestRecipients);
   const [requestBusy, setRequestBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [previewRecipients, setPreviewRecipients] = useState<EmailRecipientPreview[]>([]);
   const reportsOpen =
     meeting.status === "reports_open" ||
     meeting.status === "agenda_generated" ||
@@ -1042,7 +1112,29 @@ function ReportsCard({
   const isReporter = reportingUserIds.has(currentUserId);
   const visibleUsers = isAdmin ? reporters : reporters.filter((u) => u.id === currentUserId);
 
-  const handleRequestReports = async () => {
+  const openRequestConfirm = async () => {
+    setRequestBusy(true);
+    try {
+      const listed = await listReportRecipients({ data: { meetingId: meeting.id } });
+      if (!listed.recipients?.length) {
+        toast.error(
+          "No reporting officers with email addresses. Assign submits_report positions or add emails.",
+        );
+        return;
+      }
+      setPreviewRecipients(listed.recipients);
+      setConfirmOpen(true);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      else toast.error(msg);
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
+  const confirmRequestReports = async () => {
+    setConfirmOpen(false);
     setRequestBusy(true);
     try {
       const r = await requestReports({ data: { meetingId: meeting.id } });
@@ -1136,7 +1228,7 @@ function ReportsCard({
               size="sm"
               variant="secondary"
               disabled={requestBusy}
-              onClick={handleRequestReports}
+              onClick={() => void openRequestConfirm()}
             >
               <Mail className="mr-1 size-4" />
               {requestBusy ? "Sending…" : "Request officer reports"}
@@ -1166,6 +1258,29 @@ function ReportsCard({
           </div>
         )}
       </CardContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Request officer reports?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A separate Gmail message will be sent to each of the following {previewRecipients.length} recipient(s). Confirm to send.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-60 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3 text-sm">
+            {previewRecipients.map((r) => (
+              <li key={r.email}>
+                <span className="font-medium text-foreground">{r.name}</span>{" "}
+                <span className="text-muted-foreground">&lt;{r.email}&gt;</span>
+              </li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmRequestReports()}>Confirm Send</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

@@ -216,7 +216,80 @@ export const generateAgenda = createServerFn({ method: "POST" })
     return { agendaUrl: webViewLink };
   });
 
-const APP_URL = "https://qimiiting-prototype.up.railway.app";
+type EmailRecipient = { id: string | null; name: string; email: string };
+
+async function resolveMeetingNoticeRecipients(supabase: any, orgId: string): Promise<EmailRecipient[]> {
+  const { data: usersRows } = await supabase
+    .from("users")
+    .select("id, email, name")
+    .eq("organization_id", orgId);
+  return (usersRows ?? [])
+    .filter((u: any) => u.email)
+    .map((u: any) => ({
+      id: (u.id as string) ?? null,
+      name: ((u.name as string) || (u.email as string)) as string,
+      email: u.email as string,
+    }));
+}
+
+async function resolveOfficerReportRecipients(supabase: any, orgId: string): Promise<EmailRecipient[]> {
+  const { data: holderRows } = await supabase
+    .from("position_holders")
+    .select("current_login_user_id, forwarding_email, holder_name, positions!inner(submits_report)")
+    .eq("organization_id", orgId)
+    .is("term_end", null)
+    .eq("positions.submits_report", true);
+
+  const recipients: EmailRecipient[] = [];
+  const seenEmails = new Set<string>();
+
+  const addRecipient = (email: string | null | undefined, uid: string | null, name: string) => {
+    const e = (email ?? "").trim().toLowerCase();
+    if (!e || seenEmails.has(e)) return;
+    seenEmails.add(e);
+    recipients.push({ email: e, id: uid, name: name || e });
+  };
+
+  const loginUserIds = (holderRows ?? [])
+    .map((h: any) => h.current_login_user_id as string | null)
+    .filter((id: string | null): id is string => !!id);
+  const { data: loginUsers } = loginUserIds.length
+    ? await supabase.from("users").select("id, email, name").in("id", loginUserIds)
+    : { data: [] as { id: string; email: string | null; name: string | null }[] };
+  const userById = new Map((loginUsers ?? []).map((u: any) => [u.id as string, u]));
+
+  for (const h of holderRows ?? []) {
+    const uid = (h as any).current_login_user_id as string | null;
+    const user = uid ? userById.get(uid) : null;
+    const userEmail = (user?.email as string | null | undefined) ?? null;
+    const fwd = (h as any).forwarding_email as string | null;
+    const name =
+      ((user?.name as string | null | undefined) || ((h as any).holder_name as string) || "") as string;
+    addRecipient(userEmail || fwd, uid, name);
+  }
+
+  return recipients;
+}
+
+export const listMeetingNoticeRecipients = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
+    const recipients = await resolveMeetingNoticeRecipients(supabase, orgId);
+    return { recipients };
+  });
+
+export const listOfficerReportRequestRecipients = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
+    const recipients = await resolveOfficerReportRecipients(supabase, orgId);
+    return { recipients };
+  });
 
 export const sendMeetingNotice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -225,11 +298,7 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
     const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
-    const { data: usersRows } = await supabase
-      .from("users")
-      .select("id, email, name")
-      .eq("organization_id", orgId);
-    const recipients = (usersRows ?? []).filter((u: any) => u.email);
+    const recipients = await resolveMeetingNoticeRecipients(supabase, orgId);
     if (recipients.length === 0) throw new Error("No recipients with email addresses.");
 
     const esc = (s: string) =>
@@ -265,23 +334,31 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
     `;
 
     const { sendGmail } = await import("./google.server");
-    const { messageId } = await sendGmail(orgId, {
-      to: recipients.map((u: any) => u.email),
-      subject,
-      html,
-    });
-
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("email_log").insert(
-      recipients.map((u: any) => ({
-        meeting_id: data.meetingId,
-        organization_id: orgId,
-        recipient_user_id: u.id,
-        email_type: "meeting_notice",
-        gmail_message_id: messageId,
-      })),
-    );
-    return { sent: recipients.length };
+    let sent = 0;
+    for (const u of recipients) {
+      try {
+        const { messageId } = await sendGmail(orgId, {
+          to: [u.email],
+          subject,
+          html,
+        });
+        await supabaseAdmin.from("email_log").insert({
+          meeting_id: data.meetingId,
+          organization_id: orgId,
+          recipient_user_id: u.id,
+          email_type: "meeting_notice",
+          gmail_message_id: messageId,
+        });
+        sent++;
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        throw new Error(
+          `Meeting notice failed after ${sent} successful send(s) of ${recipients.length} (attempted ${sent + 1}): ${msg}`,
+        );
+      }
+    }
+    return { sent };
   });
 
 export const sendOfficerReportRequest = createServerFn({ method: "POST" })
@@ -292,54 +369,12 @@ export const sendOfficerReportRequest = createServerFn({ method: "POST" })
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
     const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
 
-    const { data: holderRows } = await supabase
-      .from("position_holders")
-      .select("current_login_user_id, forwarding_email, positions!inner(submits_report)")
-      .eq("organization_id", orgId)
-      .is("term_end", null)
-      .eq("positions.submits_report", true);
-
-    type Recipient = { email: string; userId: string | null };
-    const recipients: Recipient[] = [];
-    const seenEmails = new Set<string>();
-
-    const addRecipient = (email: string | null | undefined, uid: string | null) => {
-      const e = (email ?? "").trim().toLowerCase();
-      if (!e || seenEmails.has(e)) return;
-      seenEmails.add(e);
-      recipients.push({ email: e, userId: uid });
-    };
-
-    const loginUserIds = (holderRows ?? [])
-      .map((h: any) => h.current_login_user_id as string | null)
-      .filter((id: string | null): id is string => !!id);
-    const { data: loginUsers } = loginUserIds.length
-      ? await supabase.from("users").select("id, email").in("id", loginUserIds)
-      : { data: [] as { id: string; email: string | null }[] };
-    const emailByUserId = new Map((loginUsers ?? []).map((u: any) => [u.id as string, u.email as string | null]));
-
-    for (const h of holderRows ?? []) {
-      const uid = (h as any).current_login_user_id as string | null;
-      const userEmail = uid ? emailByUserId.get(uid) ?? null : null;
-      const fwd = (h as any).forwarding_email as string | null;
-      addRecipient(userEmail || fwd, uid);
-    }
-
+    const recipients = await resolveOfficerReportRecipients(supabase, orgId);
     if (recipients.length === 0) {
-      const { data: roleRows } = await supabase
-        .from("user_roles")
-        .select("user_id, role")
-        .in("role", ["officer", "chair", "secretary"]);
-      const roleUserIds = [...new Set((roleRows ?? []).map((r: any) => r.user_id as string))];
-      const { data: roleUsers } = roleUserIds.length
-        ? await supabase.from("users").select("id, email").eq("organization_id", orgId).in("id", roleUserIds)
-        : { data: [] as { id: string; email: string | null }[] };
-      for (const u of roleUsers ?? []) {
-        addRecipient((u as any).email, (u as any).id);
-      }
+      throw new Error(
+        "No reporting officers with email addresses. Assign submits_report positions or add emails.",
+      );
     }
-
-    if (recipients.length === 0) throw new Error("No recipients with email addresses.");
 
     const esc = (s: string) =>
       String(s ?? "")
@@ -348,6 +383,7 @@ export const sendOfficerReportRequest = createServerFn({ method: "POST" })
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    const appUrl = getOrigin();
     const subject = `[${org?.name ?? "Meeting"}] Officer reports requested — ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
     const html = `
       <p>Officer reports are open for the upcoming meeting.</p>
@@ -355,28 +391,36 @@ export const sendOfficerReportRequest = createServerFn({ method: "POST" })
       Date: ${esc(meeting.meeting_date.slice(0, 10))}<br/>
       Type: ${esc(meeting.meeting_type)}</p>
       <p>Please submit your report in QiMiiTiNG at
-        <a href="${APP_URL}">${APP_URL}</a>.</p>
+        <a href="${esc(appUrl)}">${esc(appUrl)}</a>.</p>
     `;
 
     const { sendGmail } = await import("./google.server");
-    const { messageId } = await sendGmail(orgId, {
-      to: recipients.map((r) => r.email),
-      subject,
-      html,
-    });
-
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("email_log").insert(
-      recipients.map((r) => ({
-        meeting_id: data.meetingId,
-        organization_id: orgId,
-        recipient_user_id: r.userId,
-        email_type: "officer_report_request",
-        gmail_message_id: messageId,
-      })),
-    );
+    let sent = 0;
+    for (const r of recipients) {
+      try {
+        const { messageId } = await sendGmail(orgId, {
+          to: [r.email],
+          subject,
+          html,
+        });
+        await supabaseAdmin.from("email_log").insert({
+          meeting_id: data.meetingId,
+          organization_id: orgId,
+          recipient_user_id: r.id,
+          email_type: "officer_report_request",
+          gmail_message_id: messageId,
+        });
+        sent++;
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        throw new Error(
+          `Officer report request failed after ${sent} successful send(s) of ${recipients.length} (attempted ${sent + 1}): ${msg}`,
+        );
+      }
+    }
 
-    const userIds = recipients.map((r) => r.userId).filter((id): id is string => !!id);
+    const userIds = recipients.map((r) => r.id).filter((id): id is string => !!id);
     if (userIds.length > 0) {
       await supabaseAdmin
         .from("officer_reports")
@@ -385,7 +429,7 @@ export const sendOfficerReportRequest = createServerFn({ method: "POST" })
         .in("user_id", userIds);
     }
 
-    return { sent: recipients.length };
+    return { sent };
   });
 
 export const uploadApprovedMinutes = createServerFn({ method: "POST" })
