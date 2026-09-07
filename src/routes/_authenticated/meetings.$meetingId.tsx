@@ -2,9 +2,28 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, CheckCircle2, Circle, ExternalLink, FileText, Mail, Plus, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Circle,
+  ExternalLink,
+  FileText,
+  Mail,
+  Plus,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
-import { generateAgenda, sendMeetingNotice, sendOfficerReportRequest, listMeetingNoticeRecipients, listOfficerReportRequestRecipients, uploadApprovedMinutes, importFieldyTranscript, draftMinutes, approveMinutes } from "@/lib/google.functions";
+import {
+  generateAgenda,
+  sendMeetingNotice,
+  sendOfficerReportRequest,
+  listMeetingNoticeRecipients,
+  listOfficerReportRequestRecipients,
+  uploadApprovedMinutes,
+  importFieldyTranscript,
+  draftMinutes,
+  approveMinutes,
+} from "@/lib/google.functions";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,7 +73,6 @@ export const Route = createFileRoute("/_authenticated/meetings/$meetingId")({
   notFoundComponent: RouteNotFoundComponent,
 });
 
-
 type Meeting = {
   id: string;
   organization_id: string;
@@ -100,7 +118,6 @@ type Report = {
   submitted_at: string;
 };
 
-
 const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
   reports_open: "Reports open",
@@ -120,7 +137,9 @@ function MeetingPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
-  const [holders, setHolders] = useState<{ user_id: string; category: string; submits_report: boolean }[]>([]);
+  const [holders, setHolders] = useState<
+    { user_id: string; category: string; submits_report: boolean }[]
+  >([]);
   const [motions, setMotions] = useState<Motion[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false);
@@ -129,7 +148,10 @@ function MeetingPage() {
   const refresh = useCallback(async () => {
     const [m, a, mo, rp] = await Promise.all([
       supabase.from("meetings").select("*").eq("id", meetingId).maybeSingle(),
-      supabase.from("attendees").select("id, user_id, present, attendance_status, arrived_at").eq("meeting_id", meetingId),
+      supabase
+        .from("attendees")
+        .select("id, user_id, present, attendance_status, arrived_at")
+        .eq("meeting_id", meetingId),
       supabase
         .from("motions")
         .select("*")
@@ -205,13 +227,16 @@ function MeetingPage() {
         .filter((h) => h.category === "elected_officer" || h.category === "director_at_large")
         .map((h) => h.user_id),
     );
-    const officers = new Set(holders.filter((h) => h.category === "elected_officer").map((h) => h.user_id));
+    const officers = new Set(
+      holders.filter((h) => h.category === "elected_officer").map((h) => h.user_id),
+    );
     const presentVoting = [...votingBoard].filter((id) => presentIds.has(id)).length;
     const presentOfficers = [...officers].filter((id) => presentIds.has(id)).length;
     const reqVoting = Math.ceil(0.2 * votingBoard.size);
     const reqOfficers = Math.ceil(0.5 * officers.size);
     const isMembership = meeting?.meeting_type === "agm";
-    const execMet = votingBoard.size > 0 && presentVoting >= reqVoting && presentOfficers >= reqOfficers;
+    const execMet =
+      votingBoard.size > 0 && presentVoting >= reqVoting && presentOfficers >= reqOfficers;
     return {
       isMembership,
       votingBoardTotal: votingBoard.size,
@@ -251,8 +276,8 @@ function MeetingPage() {
     );
   }
 
-
-  const editable = isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
+  const editable =
+    isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
 
   const setAttendance = async (userId: string, status: AttendanceStatus) => {
     setBusy(true);
@@ -261,21 +286,32 @@ function MeetingPage() {
       // Present and Late both count as "in the room" for quorum; keep the present
       // flag in sync so quorum and other consumers keep working unchanged.
       const present = status === "present" || status === "late";
-      const arrived_at = status === "late" ? existing.arrived_at ?? new Date().toISOString() : null;
+      const arrived_at =
+        status === "late" ? (existing.arrived_at ?? new Date().toISOString()) : null;
       const { error } = await supabase
         .from("attendees")
         .update({ attendance_status: status, present, arrived_at })
         .eq("id", existing.id);
       if (error) toast.error(error.message);
       setAttendees((prev) =>
-        prev.map((a) => (a.id === existing.id ? { ...a, attendance_status: status, present, arrived_at } : a)),
+        prev.map((a) =>
+          a.id === existing.id ? { ...a, attendance_status: status, present, arrived_at } : a,
+        ),
       );
     }
     setBusy(false);
   };
 
   const transition = async (
-    next: "scheduled" | "reports_open" | "agenda_generated" | "in_progress" | "adjourned" | "minutes_draft" | "minutes_approved" | "cancelled",
+    next:
+      | "scheduled"
+      | "reports_open"
+      | "agenda_generated"
+      | "in_progress"
+      | "adjourned"
+      | "minutes_draft"
+      | "minutes_approved"
+      | "cancelled",
   ) => {
     setBusy(true);
     const patch: Record<string, unknown> = { status: next, quorum_met: quorumMet };
@@ -285,7 +321,10 @@ function MeetingPage() {
     if (next === "adjourned" && !meeting.conversation_end_time) {
       patch.conversation_end_time = new Date().toISOString();
     }
-    const { error } = await supabase.from("meetings").update(patch as never).eq("id", meetingId);
+    const { error } = await supabase
+      .from("meetings")
+      .update(patch as never)
+      .eq("id", meetingId);
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -295,7 +334,10 @@ function MeetingPage() {
     refresh();
   };
 
-  const canCallToOrder = meeting.status === "scheduled" || meeting.status === "agenda_generated" || meeting.status === "reports_open";
+  const canCallToOrder =
+    meeting.status === "scheduled" ||
+    meeting.status === "agenda_generated" ||
+    meeting.status === "reports_open";
   const canAdjourn = meeting.status === "in_progress";
   const validations: { label: string; ok: boolean }[] = [
     {
@@ -307,9 +349,7 @@ function MeetingPage() {
     { label: "At least one motion recorded", ok: motions.length > 0 },
     {
       label: "All motions have mover, seconder, and a result",
-      ok:
-        motions.length === 0 ||
-        motions.every((m) => m.moved_by && m.seconded_by && m.result),
+      ok: motions.length === 0 || motions.every((m) => m.moved_by && m.seconded_by && m.result),
     },
   ];
   const allValid = validations.every((v) => v.ok);
@@ -318,7 +358,11 @@ function MeetingPage() {
     !["adjourned", "minutes_draft", "minutes_approved", "cancelled"].includes(meeting.status);
 
   const onCancelMeeting = () => {
-    if (confirm(`Cancel "${meeting.title}"? This marks the meeting cancelled — it is not deleted, and the record is kept.`)) {
+    if (
+      confirm(
+        `Cancel "${meeting.title}"? This marks the meeting cancelled — it is not deleted, and the record is kept.`,
+      )
+    ) {
       transition("cancelled");
     }
   };
@@ -391,18 +435,30 @@ function MeetingPage() {
           <CardDescription>
             {quorum.isMembership ? (
               <>
-                Membership / electoral meeting — quorum is the lesser of 10 Registered Liberals in the
-                riding or 20% of them (By-law 2 Section 10.7). QiMiiTiNG can't count riding membership,
-                so the Chair confirms quorum below.
+                Membership / electoral meeting — quorum is the lesser of 10 Registered Liberals in
+                the riding or 20% of them (By-law 2 Section 10.7). QiMiiTiNG can't count riding
+                membership, so the Chair confirms quorum below.
               </>
             ) : (
               <>
                 Executive quorum (By-law 2 Section 8.5): at least 50% of elected officers{" "}
-                <span className={quorum.presentOfficers >= quorum.reqOfficers ? "font-medium text-primary" : "font-medium"}>
+                <span
+                  className={
+                    quorum.presentOfficers >= quorum.reqOfficers
+                      ? "font-medium text-primary"
+                      : "font-medium"
+                  }
+                >
                   ({quorum.presentOfficers}/{quorum.officersTotal}, need {quorum.reqOfficers})
                 </span>{" "}
                 and at least 20% of the voting board{" "}
-                <span className={quorum.presentVoting >= quorum.reqVoting ? "font-medium text-primary" : "font-medium"}>
+                <span
+                  className={
+                    quorum.presentVoting >= quorum.reqVoting
+                      ? "font-medium text-primary"
+                      : "font-medium"
+                  }
+                >
                   ({quorum.presentVoting}/{quorum.votingBoardTotal}, need {quorum.reqVoting})
                 </span>
                 . {quorumMet ? "Quorum met." : "Quorum not yet met."}
@@ -464,7 +520,6 @@ function MeetingPage() {
         </CardContent>
       </Card>
 
-
       <ReportsCard
         meeting={meeting}
         users={users}
@@ -489,7 +544,8 @@ function MeetingPage() {
           {motions.length === 0 ? (
             <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
               No motions yet.
-              {meeting.status !== "in_progress" && " Motions can be recorded once the meeting is called to order."}
+              {meeting.status !== "in_progress" &&
+                " Motions can be recorded once the meeting is called to order."}
             </p>
           ) : (
             motions.map((m) => (
@@ -504,7 +560,6 @@ function MeetingPage() {
           )}
         </CardContent>
       </Card>
-
 
       {isAdmin && (
         <Card>
@@ -521,7 +576,11 @@ function MeetingPage() {
                     Allow officers to submit their reports for this meeting.
                   </p>
                 </div>
-                <Button variant="secondary" onClick={() => transition("reports_open")} disabled={busy}>
+                <Button
+                  variant="secondary"
+                  onClick={() => transition("reports_open")}
+                  disabled={busy}
+                >
                   Open reports
                 </Button>
               </div>
@@ -580,9 +639,12 @@ function MeetingPage() {
         </Card>
       )}
 
-      {isAdmin && (meeting.status === "adjourned" || meeting.status === "minutes_draft" || meeting.status === "minutes_approved") && (
-        <MinutesCard meeting={meeting} onUpdate={refresh} />
-      )}
+      {isAdmin &&
+        (meeting.status === "adjourned" ||
+          meeting.status === "minutes_draft" ||
+          meeting.status === "minutes_approved") && (
+          <MinutesCard meeting={meeting} onUpdate={refresh} />
+        )}
 
       {isAdmin && <WorkspaceCard meeting={meeting} onUpdate={refresh} />}
     </div>
@@ -672,23 +734,31 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
       <CardHeader>
         <CardTitle className="text-base">Minutes</CardTitle>
         <CardDescription>
-          Import the Fieldy transcript (if enabled), generate an AI draft using GPT-4o, then review and approve. Motions are reproduced verbatim.
+          Import the Fieldy transcript (if enabled), generate an AI draft using GPT-4o, then review
+          and approve. Motions are reproduced verbatim.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           {meeting.fieldy_enabled && (
             <Button variant="secondary" disabled={busy !== null} onClick={handleImport}>
-              {busy === "import" ? "Importing…" : `Import Fieldy transcript${segmentCount != null ? ` (${segmentCount})` : ""}`}
+              {busy === "import"
+                ? "Importing…"
+                : `Import Fieldy transcript${segmentCount != null ? ` (${segmentCount})` : ""}`}
             </Button>
           )}
           <Button disabled={busy !== null} onClick={handleDraft}>
-            {busy === "draft" ? "Drafting…" : draftText ? "Re-draft minutes (AI)" : "Draft minutes (AI)"}
+            {busy === "draft"
+              ? "Drafting…"
+              : draftText
+                ? "Re-draft minutes (AI)"
+                : "Draft minutes (AI)"}
           </Button>
         </div>
 
         <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          AI drafts are a starting point only. The secretary must review every line for accuracy before approval. Motion text is reproduced verbatim and must not be edited.
+          AI drafts are a starting point only. The secretary must review every line for accuracy
+          before approval. Motion text is reproduced verbatim and must not be edited.
         </p>
 
         {!draftText && segmentCount === 0 && meeting.fieldy_enabled && (
@@ -705,7 +775,9 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
         )}
 
         <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Approved minutes (editable)</Label>
+          <Label className="text-xs uppercase text-muted-foreground">
+            Approved minutes (editable)
+          </Label>
           <Textarea
             rows={12}
             value={approvedText}
@@ -714,8 +786,16 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
             className="font-mono text-xs"
           />
           <div className="flex justify-end">
-            <Button variant="default" disabled={busy !== null || !approvedText.trim()} onClick={handleApprove}>
-              {busy === "approve" ? "Approving…" : meeting.status === "minutes_approved" ? "Save edits (audit logged)" : "Approve minutes"}
+            <Button
+              variant="default"
+              disabled={busy !== null || !approvedText.trim()}
+              onClick={handleApprove}
+            >
+              {busy === "approve"
+                ? "Approving…"
+                : meeting.status === "minutes_approved"
+                  ? "Save edits (audit logged)"
+                  : "Approve minutes"}
             </Button>
           </div>
         </div>
@@ -723,10 +803,6 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
     </Card>
   );
 }
-
-
-
-
 
 type EmailRecipientPreview = { id?: string | null; name: string; email: string };
 function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => void }) {
@@ -738,7 +814,11 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [previewRecipients, setPreviewRecipients] = useState<EmailRecipientPreview[]>([]);
 
-  const run = async (key: string, fn: () => Promise<{ agendaUrl?: string; sent?: number; minutesUrl?: string }>, ok: (r: any) => string) => {
+  const run = async (
+    key: string,
+    fn: () => Promise<{ agendaUrl?: string; sent?: number; minutesUrl?: string }>,
+    ok: (r: any) => string,
+  ) => {
     setBusy(key);
     try {
       const r = await fn();
@@ -746,7 +826,8 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
       onUpdate();
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      if (msg.includes("not connected"))
+        toast.error("Connect your Google account in Settings first.");
       else toast.error(msg);
     } finally {
       setBusy(null);
@@ -765,7 +846,8 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
       setConfirmOpen(true);
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      if (msg.includes("not connected"))
+        toast.error("Connect your Google account in Settings first.");
       else toast.error(msg);
     } finally {
       setBusy(null);
@@ -786,8 +868,12 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
       <CardHeader>
         <CardTitle className="text-base">Google Workspace</CardTitle>
         <CardDescription>
-          Generate the agenda with AI, email a preliminary meeting notice (works before the agenda exists; resend after generating the agenda to include the link), and archive approved minutes to Drive.{" "}
-          <Link to="/settings" className="underline">Manage connection</Link>
+          Generate the agenda with AI, email a preliminary meeting notice (works before the agenda
+          exists; resend after generating the agenda to include the link), and archive approved
+          minutes to Drive.{" "}
+          <Link to="/settings" className="underline">
+            Manage connection
+          </Link>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -795,7 +881,13 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           <Button
             variant="secondary"
             disabled={busy !== null}
-            onClick={() => run("agenda", () => genAgenda({ data: { meetingId: meeting.id } }), (r) => `Agenda generated and saved to Drive`)}
+            onClick={() =>
+              run(
+                "agenda",
+                () => genAgenda({ data: { meetingId: meeting.id } }),
+                (r) => `Agenda generated and saved to Drive`,
+              )
+            }
           >
             <FileText className="mr-1 size-4" />
             {busy === "agenda" ? "Generating…" : "Generate agenda (AI)"}
@@ -811,25 +903,44 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           <Button
             variant="secondary"
             disabled={busy !== null || meeting.status !== "minutes_draft"}
-            onClick={() => run("minutes", () => uploadMins({ data: { meetingId: meeting.id } }), () => "Approved minutes uploaded to Drive")}
-            title={meeting.status === "minutes_draft" ? undefined : "Approve minutes first (Milestone 5)"}
+            onClick={() =>
+              run(
+                "minutes",
+                () => uploadMins({ data: { meetingId: meeting.id } }),
+                () => "Approved minutes uploaded to Drive",
+              )
+            }
+            title={
+              meeting.status === "minutes_draft" ? undefined : "Approve minutes first (Milestone 5)"
+            }
           >
             <Upload className="mr-1 size-4" />
             {busy === "minutes" ? "Uploading…" : "Upload approved minutes"}
           </Button>
         </div>
         <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          AI-generated agendas follow Robert's Rules and LPC By-law 2 conventions. Always review before distribution — the chair is responsible for the final content.
+          AI-generated agendas follow Robert's Rules and LPC By-law 2 conventions. Always review
+          before distribution — the chair is responsible for the final content.
         </p>
 
         <div className="space-y-1 text-sm">
           {meeting.agenda_url && (
-            <a href={meeting.agenda_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+            <a
+              href={meeting.agenda_url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
               <ExternalLink className="size-3" /> Agenda.pdf
             </a>
           )}
           {meeting.minutes_approved_url && (
-            <a href={meeting.minutes_approved_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+            <a
+              href={meeting.minutes_approved_url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
               <ExternalLink className="size-3" /> Minutes-Approved.pdf
             </a>
           )}
@@ -841,7 +952,8 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           <AlertDialogHeader>
             <AlertDialogTitle>Send meeting notice?</AlertDialogTitle>
             <AlertDialogDescription>
-              A separate Gmail message will be sent to each of the following {previewRecipients.length} recipient(s). Confirm to send.
+              A separate Gmail message will be sent to each of the following{" "}
+              {previewRecipients.length} recipient(s). Confirm to send.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ul className="max-h-60 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3 text-sm">
@@ -910,10 +1022,14 @@ function MotionRow({
         <div className="space-y-1">
           <Label className="text-xs">Moved by</Label>
           <Select value={moved} onValueChange={setMoved} disabled={!editable}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Select" />
+            </SelectTrigger>
             <SelectContent>
               {users.map((u) => (
-                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -921,10 +1037,14 @@ function MotionRow({
         <div className="space-y-1">
           <Label className="text-xs">Seconded by</Label>
           <Select value={seconded} onValueChange={setSeconded} disabled={!editable}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Select" />
+            </SelectTrigger>
             <SelectContent>
               {users.map((u) => (
-                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -966,7 +1086,9 @@ function MotionRow({
         <div className="flex-1 space-y-1">
           <Label className="text-xs">Result</Label>
           <Select value={result} onValueChange={setResult} disabled={!editable}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Select" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="carried">Carried</SelectItem>
               <SelectItem value="defeated">Defeated</SelectItem>
@@ -1049,10 +1171,14 @@ function AddMotionDialog({
             <div className="space-y-1">
               <Label className="text-xs">Moved by</Label>
               <Select value={moved} onValueChange={setMoved}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
                 <SelectContent>
                   {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1060,10 +1186,14 @@ function AddMotionDialog({
             <div className="space-y-1">
               <Label className="text-xs">Seconded by</Label>
               <Select value={seconded} onValueChange={setSeconded}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
                 <SelectContent>
                   {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1126,7 +1256,8 @@ function ReportsCard({
       setConfirmOpen(true);
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      if (msg.includes("not connected"))
+        toast.error("Connect your Google account in Settings first.");
       else toast.error(msg);
     } finally {
       setRequestBusy(false);
@@ -1142,7 +1273,8 @@ function ReportsCard({
       onUpdate();
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      if (msg.includes("not connected")) toast.error("Connect your Google account in Settings first.");
+      if (msg.includes("not connected"))
+        toast.error("Connect your Google account in Settings first.");
       else toast.error(msg);
     } finally {
       setRequestBusy(false);
@@ -1193,9 +1325,13 @@ function ReportsCard({
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{u.name}</span>
                   {r ? (
-                    <Badge variant="secondary" className="text-xs">Submitted</Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      Submitted
+                    </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-xs">Pending</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      Pending
+                    </Badge>
                   )}
                 </div>
                 {r && (
@@ -1248,7 +1384,9 @@ function ReportsCard({
                     toast.error(error.message);
                     return;
                   }
-                  toast.success("Motion added. Record the seconder and the vote in the Motions section.");
+                  toast.success(
+                    "Motion added. Record the seconder and the vote in the Motions section.",
+                  );
                   onUpdate();
                 }}
               >
@@ -1264,7 +1402,8 @@ function ReportsCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Request officer reports?</AlertDialogTitle>
             <AlertDialogDescription>
-              A separate Gmail message will be sent to each of the following {previewRecipients.length} recipient(s). Confirm to send.
+              A separate Gmail message will be sent to each of the following{" "}
+              {previewRecipients.length} recipient(s). Confirm to send.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ul className="max-h-60 space-y-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3 text-sm">
@@ -1277,7 +1416,9 @@ function ReportsCard({
           </ul>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmRequestReports()}>Confirm Send</AlertDialogAction>
+            <AlertDialogAction onClick={() => void confirmRequestReports()}>
+              Confirm Send
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

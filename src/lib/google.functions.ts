@@ -173,7 +173,11 @@ export const generateAgenda = createServerFn({ method: "POST" })
     let previousMotions: string[] = [];
     if (priorMeeting) {
       const [{ data: prevMin }, { data: prevMotions }] = await Promise.all([
-        supabase.from("minutes").select("approved_text").eq("meeting_id", priorMeeting.id).maybeSingle(),
+        supabase
+          .from("minutes")
+          .select("approved_text")
+          .eq("meeting_id", priorMeeting.id)
+          .maybeSingle(),
         supabase
           .from("motions")
           .select("motion_text, result")
@@ -185,9 +189,7 @@ export const generateAgenda = createServerFn({ method: "POST" })
         date: priorMeeting.meeting_date,
         approved: !!prevMin?.approved_text,
       };
-      previousMotions = (prevMotions ?? []).map(
-        (m: any) => `- [${m.result}] ${m.motion_text}`,
-      );
+      previousMotions = (prevMotions ?? []).map((m: any) => `- [${m.result}] ${m.motion_text}`);
     }
 
     const agendaBody = await generateAgendaText({
@@ -218,7 +220,10 @@ export const generateAgenda = createServerFn({ method: "POST" })
 
 type EmailRecipient = { id: string | null; name: string; email: string };
 
-async function resolveMeetingNoticeRecipients(supabase: any, orgId: string): Promise<EmailRecipient[]> {
+async function resolveMeetingNoticeRecipients(
+  supabase: any,
+  orgId: string,
+): Promise<EmailRecipient[]> {
   const { data: usersRows } = await supabase
     .from("users")
     .select("id, email, name")
@@ -232,7 +237,10 @@ async function resolveMeetingNoticeRecipients(supabase: any, orgId: string): Pro
     }));
 }
 
-async function resolveOfficerReportRecipients(supabase: any, orgId: string): Promise<EmailRecipient[]> {
+async function resolveOfficerReportRecipients(
+  supabase: any,
+  orgId: string,
+): Promise<EmailRecipient[]> {
   const { data: holderRows } = await supabase
     .from("position_holders")
     .select("current_login_user_id, forwarding_email, holder_name, positions!inner(submits_report)")
@@ -263,8 +271,9 @@ async function resolveOfficerReportRecipients(supabase: any, orgId: string): Pro
     const user = uid ? userById.get(uid) : null;
     const userEmail = (user?.email as string | null | undefined) ?? null;
     const fwd = (h as any).forwarding_email as string | null;
-    const name =
-      ((user?.name as string | null | undefined) || ((h as any).holder_name as string) || "") as string;
+    const name = ((user?.name as string | null | undefined) ||
+      ((h as any).holder_name as string) ||
+      "") as string;
     addRecipient(userEmail || fwd, uid, name);
   }
 
@@ -297,7 +306,11 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
-    const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
     const recipients = await resolveMeetingNoticeRecipients(supabase, orgId);
     if (recipients.length === 0) throw new Error("No recipients with email addresses.");
 
@@ -367,7 +380,11 @@ export const sendOfficerReportRequest = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
-    const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
 
     const recipients = await resolveOfficerReportRecipients(supabase, orgId);
     if (recipients.length === 0) {
@@ -438,7 +455,11 @@ export const uploadApprovedMinutes = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
-    const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
     const { data: minutes } = await supabase
       .from("minutes")
       .select("approved_text, approved_at")
@@ -461,7 +482,10 @@ export const uploadApprovedMinutes = createServerFn({ method: "POST" })
       .from("meetings")
       .update({ minutes_approved_url: webViewLink, status: "minutes_approved" })
       .eq("id", data.meetingId);
-    await supabaseAdmin.from("minutes").update({ drive_url: webViewLink }).eq("meeting_id", data.meetingId);
+    await supabaseAdmin
+      .from("minutes")
+      .update({ drive_url: webViewLink })
+      .eq("meeting_id", data.meetingId);
     return { minutesUrl: webViewLink };
   });
 
@@ -473,7 +497,8 @@ export const importFieldyTranscript = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { orgId, meeting } = await loadMeetingForAdmin(supabase, userId, data.meetingId);
-    if (!meeting.fieldy_enabled) throw new Error("Fieldy recording is not enabled for this meeting.");
+    if (!meeting.fieldy_enabled)
+      throw new Error("Fieldy recording is not enabled for this meeting.");
 
     // Determine time window. Prefer recorded conversation times; fall back to meeting_date.
     const start = meeting.conversation_start_time
@@ -607,16 +632,14 @@ Produce the formal meeting minutes as plain text. Include sections: Call to Orde
     const draft = await openaiChat({ system: MINUTES_SYSTEM_PROMPT, user: userMessage });
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin
-      .from("minutes")
-      .upsert(
-        {
-          meeting_id: data.meetingId,
-          ai_draft_text: draft,
-          ai_draft_created_at: new Date().toISOString(),
-        } as never,
-        { onConflict: "meeting_id" },
-      );
+    await supabaseAdmin.from("minutes").upsert(
+      {
+        meeting_id: data.meetingId,
+        ai_draft_text: draft,
+        ai_draft_created_at: new Date().toISOString(),
+      } as never,
+      { onConflict: "meeting_id" },
+    );
     await supabaseAdmin
       .from("meetings")
       .update({ status: "minutes_draft" })
