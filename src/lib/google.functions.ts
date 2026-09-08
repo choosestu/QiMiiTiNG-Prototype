@@ -146,13 +146,21 @@ async function loadMeetingForAdmin(supabase: any, userId: string, meetingId: str
   return { orgId: profile.organization_id as string, meeting };
 }
 
+type AgendaOfficer = {
+  name: string;
+  title: string;
+  kind: "officer" | "financial";
+  reportText: string | null;
+  bankBalance: number | null;
+  source: "in-app" | "email" | null;
+};
+
 async function generateAgendaText(args: {
   org: { name: string };
   meeting: { title: string; meeting_type: string; meeting_date: string };
-  reports: { name: string; role: string; bank_balance: number | null; report_text: string }[];
+  officers: AgendaOfficer[];
   previousMotions: string[];
   previousMinutes: { title: string; date: string; approved: boolean } | null;
-  emailReports: { from: string; subject: string; body: string }[];
   correspondence: { from: string; subject: string; snippet: string }[];
   calendarEvents: { summary: string; start: string; location: string }[];
   scanNote: string | null;
@@ -160,13 +168,21 @@ async function generateAgendaText(args: {
   const { openaiChat, AGENDA_SYSTEM_PROMPT } = await import("./openai.server");
   const adoptionRequired = !!args.previousMinutes && !args.previousMinutes.approved;
   const prevMinutesLine = args.previousMinutes
-    ? `${args.previousMinutes.title} (${args.previousMinutes.date.slice(0, 10)}) — ${
+    ? `${args.previousMinutes.title} of ${args.previousMinutes.date.slice(0, 10)} — ${
         args.previousMinutes.approved
-          ? "minutes APPROVED (use 'Approval of the Previous Minutes')"
-          : "minutes NOT yet approved (you MUST add 'Adoption of the Previous Minutes')"
+          ? "minutes APPROVED (use heading 'Approval of the Previous Minutes')"
+          : "minutes NOT yet approved (use heading 'Adoption of the Previous Minutes')"
       }`
     : "(no prior meeting on record)";
   const trim = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s);
+  const officerLine = (o: AgendaOfficer) => {
+    const label = `- ${o.title} (${o.name})`;
+    const bal = o.bankBalance != null ? ` [Bank balance: $${o.bankBalance}]` : "";
+    if (o.reportText) return `${label}${bal}: ${trim(o.reportText, 900)} [report received by ${o.source}]`;
+    return `${label}${bal}: (no written report received yet — list the officer with "report to be presented")`;
+  };
+  const officerReporters = args.officers.filter((o) => o.kind === "officer");
+  const financialReporters = args.officers.filter((o) => o.kind === "financial");
   const userMessage = `Organization: ${args.org.name}
 Meeting title: ${args.meeting.title}
 Meeting type: ${args.meeting.meeting_type}
@@ -174,25 +190,25 @@ Meeting date: ${args.meeting.meeting_date.slice(0, 10)}
 
 Previous minutes status:
 ${prevMinutesLine}
-${adoptionRequired ? "REMINDER: previous minutes are unapproved — include 'Adoption of the Previous Minutes'." : ""}
+${adoptionRequired ? "REMINDER: previous minutes are unapproved — the second item MUST be 'Adoption of the Previous Minutes', naming the previous meeting's date." : ""}
 
-Officer reports submitted in-app:
-${args.reports.map((r) => `- ${r.name} (${r.role})${r.bank_balance != null ? ` [Balance: $${r.bank_balance}]` : ""}: ${r.report_text}`).join("\n") || "(none submitted in-app)"}
+Officer report roster (list EVERY one of these by title and name under "Officer Reports", each on its own line, even when no written report has been received):
+${officerReporters.map(officerLine).join("\n") || "(no officer report positions configured)"}
 
-Officer reports received by email (treat as report content):
-${args.emailReports.map((e) => `- From ${e.from} — ${e.subject}: ${trim(e.body, 800)}`).join("\n") || "(none found by email)"}
+Financial report (Treasurer — list under a "Financial Report" heading):
+${financialReporters.map(officerLine).join("\n") || "(no treasurer configured)"}
 
-Other correspondence in the scan window (decide what is agenda-worthy vs noise):
+Correspondence found in the scan window (include the items the executive should see under "Correspondence"; omit obvious noise like newsletters, product announcements, and automated notifications):
 ${args.correspondence.map((c) => `- From ${c.from} — ${c.subject}: ${trim(c.snippet, 200)}`).join("\n") || "(none found)"}
 
-Upcoming calendar dates to consider flagging to the board:
-${args.calendarEvents.map((e) => `- ${e.start.slice(0, 16).replace("T", " ")} — ${e.summary}${e.location ? ` @ ${e.location}` : ""}`).join("\n") || "(none)"}
+Upcoming calendar dates (list under "Upcoming Dates"):
+${args.calendarEvents.map((e) => `- ${e.start.slice(0, 16).replace("T", " ")} — ${e.summary}${e.location ? ` @ ${e.location}` : ""}`).join("\n") || "(none found)"}
 
-Business arising from prior meetings (tabled or unresolved motions — reproduce verbatim):
+Business arising from prior meetings (tabled or unresolved motions — reproduce verbatim under "Business Arising"):
 ${args.previousMotions.join("\n") || "(none)"}
 ${args.scanNote ? `\nNote: ${args.scanNote}` : ""}
 
-Produce only the agenda body as plain text, using the required section headings on their own lines. Do not use markdown.`;
+Produce only the agenda body as plain text, using the required section headings on their own lines, with the specific items listed beneath each heading. Never leave a section empty — write "None at this time." when a section has no items. Do not use markdown.`;
   return openaiChat({ system: AGENDA_SYSTEM_PROMPT, user: userMessage });
 }
 
@@ -218,19 +234,35 @@ export const generateAgenda = createServerFn({ method: "POST" })
         .limit(1)
         .maybeSingle(),
     ]);
-    const userIds = (reportsRaw ?? []).map((r: any) => r.user_id);
-    const { data: usersRows } = userIds.length
-      ? await supabase.from("users").select("id, name").in("id", userIds)
-      : { data: [] as { id: string; name: string }[] };
-    const { data: rolesRows } = userIds.length
-      ? await supabase.from("user_roles").select("user_id, role").in("user_id", userIds)
-      : { data: [] as { user_id: string; role: string }[] };
-    const reports = (reportsRaw ?? []).map((r: any) => ({
-      name: usersRows?.find((u: any) => u.id === r.user_id)?.name ?? "Officer",
-      role: rolesRows?.find((x: any) => x.user_id === r.user_id)?.role ?? "officer",
-      bank_balance: r.bank_balance,
-      report_text: r.report_text,
-    }));
+    // In-app reports, keyed by the submitting login user.
+    const inAppByUser = new Map<string, { report_text: string; bank_balance: number | null }>();
+    for (const r of (reportsRaw ?? []) as any[]) {
+      if (r.user_id) inAppByUser.set(r.user_id, { report_text: r.report_text, bank_balance: r.bank_balance });
+    }
+
+    // The reporting roster: filled, non-demo seats that submit a report. Every one
+    // of these is listed on the agenda whether or not a written report is in yet.
+    const { data: rosterRows } = await supabase
+      .from("position_holders")
+      .select(
+        "holder_name, current_login_user_id, forwarding_email, positions!inner(title, report_kind, display_order)",
+      )
+      .eq("organization_id", orgId)
+      .is("term_end", null)
+      .eq("is_demo", false)
+      .not("positions.report_kind", "is", null);
+    const roster = ((rosterRows ?? []) as any[])
+      .filter((r) => r.positions)
+      .sort((a, b) => a.positions.display_order - b.positions.display_order);
+    const rosterLoginIds = roster
+      .map((r) => r.current_login_user_id as string | null)
+      .filter((id): id is string => !!id);
+    const { data: rosterUsers } = rosterLoginIds.length
+      ? await supabase.from("users").select("id, email").in("id", rosterLoginIds)
+      : { data: [] as { id: string; email: string | null }[] };
+    const emailByLogin = new Map(
+      ((rosterUsers ?? []) as any[]).map((u) => [u.id as string, (u.email as string | null) ?? null]),
+    );
 
     let previousMinutes: { title: string; date: string; approved: boolean } | null = null;
     let previousMotions: string[] = [];
@@ -270,15 +302,30 @@ export const generateAgenda = createServerFn({ method: "POST" })
     const gDate = (d: Date) =>
       `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
 
-    let emailReports: { from: string; subject: string; body: string }[] = [];
+    // Map an officer's email address -> the roster holder, so correspondence sent
+    // in by a reporting officer is treated as that officer's emailed report rather
+    // than generic correspondence.
+    const officerEmailToHolder = new Map<string, any>();
+    for (const r of roster) {
+      const login = r.current_login_user_id ? emailByLogin.get(r.current_login_user_id) : null;
+      for (const e of [login, r.forwarding_email]) {
+        const norm = (e ?? "").trim().toLowerCase();
+        if (norm) officerEmailToHolder.set(norm, r);
+      }
+    }
+    const emailAddr = (from: string) => {
+      const m = from.match(/<([^>]+)>/);
+      return (m ? m[1] : from).trim().toLowerCase();
+    };
+
+    const emailedReportByHolder = new Map<any, { body: string }>();
     let correspondence: { from: string; subject: string; snippet: string }[] = [];
     let calendarEvents: { summary: string; start: string; location: string }[] = [];
     let scanNote: string | null = null;
     try {
       const { gmailSearch, calendarListEvents } = await import("./google.server");
-      const [reportMsgs, corrMsgs, events] = await Promise.all([
-        gmailSearch(orgId, `after:${gDate(winStart)} before:${gDate(dayAfter)} subject:report`, 15),
-        gmailSearch(orgId, `after:${gDate(winStart)} before:${gDate(dayAfter)}`, 20),
+      const [windowMsgs, events] = await Promise.all([
+        gmailSearch(orgId, `after:${gDate(winStart)} before:${gDate(dayAfter)}`, 25),
         calendarListEvents(
           orgId,
           new Date(`${meetingDay}T00:00:00Z`).toISOString(),
@@ -286,11 +333,14 @@ export const generateAgenda = createServerFn({ method: "POST" })
           25,
         ),
       ]);
-      const reportIds = new Set(reportMsgs.map((m) => m.id));
-      emailReports = reportMsgs.map((m) => ({ from: m.from, subject: m.subject, body: m.body }));
-      correspondence = corrMsgs
-        .filter((m) => !reportIds.has(m.id))
-        .map((m) => ({ from: m.from, subject: m.subject, snippet: m.snippet }));
+      for (const m of windowMsgs) {
+        const holder = officerEmailToHolder.get(emailAddr(m.from));
+        if (holder && !emailedReportByHolder.has(holder)) {
+          emailedReportByHolder.set(holder, { body: m.body || m.snippet });
+        } else {
+          correspondence.push({ from: m.from, subject: m.subject, snippet: m.snippet });
+        }
+      }
       calendarEvents = events.map((e) => ({
         summary: e.summary,
         start: e.start,
@@ -301,13 +351,30 @@ export const generateAgenda = createServerFn({ method: "POST" })
         "Gmail/Calendar scan was skipped (Google read access not yet granted). Reconnect Google in Settings to include emailed reports, correspondence, and calendar dates.";
     }
 
+    // Build the officer roster the agenda will enumerate, attaching each holder's
+    // report (in-app first, then emailed) when one exists.
+    const officers: AgendaOfficer[] = roster.map((r) => {
+      const login = r.current_login_user_id as string | null;
+      const inApp = login ? inAppByUser.get(login) : undefined;
+      const emailed = emailedReportByHolder.get(r);
+      const reportText = inApp?.report_text ?? emailed?.body ?? null;
+      const source: "in-app" | "email" | null = inApp ? "in-app" : emailed ? "email" : null;
+      return {
+        name: (r.holder_name as string) || "Vacant",
+        title: r.positions.title as string,
+        kind: r.positions.report_kind as "officer" | "financial",
+        reportText,
+        bankBalance: inApp?.bank_balance ?? null,
+        source,
+      };
+    });
+
     const agendaBody = await generateAgendaText({
       org: { name: org?.name ?? "Organization" },
       meeting,
-      reports,
+      officers,
       previousMotions,
       previousMinutes,
-      emailReports,
       correspondence,
       calendarEvents,
       scanNote,
