@@ -1,9 +1,11 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { CalendarIcon, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { acceptMyInvitation } from "@/lib/positions.functions";
 import { useAuth, signOut } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,8 @@ function DashboardPage() {
   const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const claimInvite = useServerFn(acceptMyInvitation);
+  const claimedRef = useRef(false);
 
   const loadMeetings = async () => {
     const { data, error } = await supabase
@@ -89,6 +93,25 @@ function DashboardPage() {
   useEffect(() => {
     if (profile) loadMeetings();
   }, [profile]);
+
+  // Self-serve invitation acceptance: if this user is linked to (or matches) a
+  // seat still marked invitation_pending, activate it on load. Covers users who
+  // were already registered when their seat was created, whom the signup trigger
+  // never fires for. Runs once per mount; a no-op when nothing is pending.
+  useEffect(() => {
+    if (!profile || claimedRef.current) return;
+    claimedRef.current = true;
+    claimInvite({})
+      .then((r) => {
+        if (r.activated > 0) {
+          toast.success(
+            `Invitation accepted: your ${r.titles.join(", ")} ${r.activated > 1 ? "seats are" : "seat is"} now active.`,
+          );
+          router.invalidate();
+        }
+      })
+      .catch(() => {});
+  }, [profile, claimInvite, router]);
 
   if (loading) {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
