@@ -248,6 +248,15 @@ function b64url(input: string | Uint8Array): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// Email headers must be ASCII. Any non-ASCII in the subject (em dashes, curly
+// quotes, accented names) must be MIME "encoded-word" (RFC 2047), otherwise the
+// raw UTF-8 bytes get mangled into mojibake by mail clients.
+function encodeSubject(subject: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(subject)) return subject;
+  return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
+}
+
 export async function sendGmail(
   orgId: string,
   args: { to: string[]; subject: string; html: string; replyTo?: string },
@@ -257,7 +266,7 @@ export async function sendGmail(
     `From: ${fromEmail ?? "me"}`,
     `To: ${args.to.join(", ")}`,
     args.replyTo ? `Reply-To: ${args.replyTo}` : "",
-    `Subject: ${args.subject}`,
+    `Subject: ${encodeSubject(args.subject)}`,
     "MIME-Version: 1.0",
     'Content-Type: text/html; charset="UTF-8"',
     "",

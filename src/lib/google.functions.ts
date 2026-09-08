@@ -384,7 +384,7 @@ export const generateAgenda = createServerFn({ method: "POST" })
     const { renderDocumentPdf } = await import("./pdf.server");
     const { uploadPdfToMeeting } = await import("./google.server");
     const bytes = await renderDocumentPdf({
-      title: `Agenda — ${meeting.title}`,
+      title: `Agenda: ${meeting.title}`,
       subtitle: `${org?.name ?? ""} • ${meeting.meeting_date.slice(0, 10)} • ${meeting.meeting_type}`,
       sections: [{ heading: "Agenda", body: agendaBody }],
       footer: `Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`,
@@ -527,8 +527,8 @@ export const sendMeetingNotice = createServerFn({ method: "POST" })
         ? meeting.agenda_url
         : null;
     const subject = safeAgendaUrl
-      ? `[${org?.name ?? "Meeting"}] ${meeting.title} — ${meeting.meeting_date.slice(0, 10)} (Agenda attached)`
-      : `[${org?.name ?? "Meeting"}] Preliminary notice — ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
+      ? `[${org?.name ?? "Meeting"}] ${meeting.title}, ${meeting.meeting_date.slice(0, 10)} (Agenda attached)`
+      : `[${org?.name ?? "Meeting"}] Preliminary notice: ${meeting.title}, ${meeting.meeting_date.slice(0, 10)}`;
     const html = safeAgendaUrl
       ? `
       <p>You are invited to the upcoming ${esc(meeting.meeting_type)} meeting.</p>
@@ -608,7 +608,7 @@ async function runReportRequest(
   const reportLabel = kind === "financial" ? "financial report" : "officer report";
   const subject = `[${org?.name ?? "Meeting"}] ${
     kind === "financial" ? "Financial report" : "Officer reports"
-  } requested — ${meeting.title} — ${meeting.meeting_date.slice(0, 10)}`;
+  } requested: ${meeting.title}, ${meeting.meeting_date.slice(0, 10)}`;
   const html = `
       <p>The ${esc(reportLabel)} is requested for the upcoming meeting.</p>
       <p><strong>${esc(meeting.title)}</strong><br/>
@@ -692,7 +692,7 @@ export const uploadApprovedMinutes = createServerFn({ method: "POST" })
     const { renderDocumentPdf } = await import("./pdf.server");
     const { uploadPdfToMeeting } = await import("./google.server");
     const bytes = await renderDocumentPdf({
-      title: `Minutes — ${meeting.title}`,
+      title: `Minutes: ${meeting.title}`,
       subtitle: `${org?.name ?? ""} • ${meeting.meeting_date.slice(0, 10)} • ${meeting.meeting_type}`,
       sections: [{ heading: "Approved Minutes", body: minutes.approved_text }],
       footer: `Approved ${(minutes.approved_at ?? new Date().toISOString()).slice(0, 16).replace("T", " ")} UTC`,

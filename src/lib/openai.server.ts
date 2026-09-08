@@ -53,6 +53,7 @@ export const AGENDA_SYSTEM_PROMPT =
   "- Upcoming Dates: list the calendar events provided with their dates.\n" +
   "- Adjournment.\n" +
   "Never leave a section empty: if a section genuinely has no items, write 'None at this time.' " +
+  "Do not use em dashes (the '—' character); use hyphens, colons, or commas instead. " +
   "Output plain text only (no markdown, no bullets other than simple '- ' lines).";
 
 export const MINUTES_SYSTEM_PROMPT =
@@ -60,4 +61,5 @@ export const MINUTES_SYSTEM_PROMPT =
   "Follow Robert's Rules of Order for minutes format. " +
   "CRITICAL: Do not rephrase, paraphrase, or alter any motion text. " +
   "Reproduce all motions verbatim as provided. " +
-  "Use the transcript only for discussion summaries — keep these brief and factual.";
+  "Use the transcript only for discussion summaries, keeping these brief and factual. " +
+  "Do not use em dashes (the '—' character); use hyphens, colons, or commas instead.";
