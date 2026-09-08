@@ -985,3 +985,81 @@ export const searchWorkspace = createServerFn({ method: "POST" })
       })),
     };
   });
+
+// ---------- Pre-adjournment motion cross-check ----------
+
+// Reconcile the imported transcript against the recorded motions. Reads
+// transcript_segments (same source draftMinutes uses) and the motions table,
+// then asks the model to flag motions moved in the transcript with no recorded
+// row (unrecorded) and recorded motions absent from the transcript (unspoken).
+// Read-only: it never writes. Returns transcript:false when nothing is imported
+// so the caller can treat the check as "not applicable" rather than a failure.
+export const checkMotionsAgainstTranscript = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { meetingId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await loadMeetingForAdmin(supabase, userId, data.meetingId);
+
+    const [{ data: segments }, { data: motionRows }] = await Promise.all([
+      supabase
+        .from("transcript_segments")
+        .select("speaker, text, segment_index")
+        .eq("meeting_id", data.meetingId)
+        .order("segment_index", { ascending: true }),
+      supabase
+        .from("motions")
+        .select("motion_text")
+        .eq("meeting_id", data.meetingId)
+        .order("created_at", { ascending: true }),
+    ]);
+
+    const recorded = ((motionRows ?? []) as any[]).map((m) => m.motion_text as string);
+    if (((segments ?? []) as any[]).length === 0) {
+      return {
+        transcript: false,
+        matched: 0,
+        unrecorded: [] as string[],
+        unspoken: [] as string[],
+        recordedCount: recorded.length,
+      };
+    }
+
+    const transcriptText = ((segments ?? []) as any[])
+      .map((s) => `${s.speaker ?? "Unknown"}: ${s.text}`)
+      .join("\n");
+    const recordedList = recorded.length
+      ? recorded.map((t, i) => `${i + 1}. ${t}`).join("\n")
+      : "(no motions recorded in the app for this meeting)";
+
+    const userMessage = `Recorded motions (from the app's motions table):
+${recordedList}
+
+Meeting transcript:
+${transcriptText}
+
+Compare them and return the strict JSON described in your instructions.`;
+
+    const { openaiChat, MOTION_CHECK_SYSTEM_PROMPT } = await import("./openai.server");
+    const rawText = await openaiChat({ system: MOTION_CHECK_SYSTEM_PROMPT, user: userMessage });
+
+    // Tolerate code fences or stray prose around the JSON object.
+    let parsed: { unrecorded?: unknown; unspoken?: unknown; matched?: unknown } = {};
+    try {
+      const cleaned = rawText.replace(/```json\s*|```/gi, "").trim();
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      parsed = JSON.parse(start >= 0 && end >= 0 ? cleaned.slice(start, end + 1) : cleaned);
+    } catch {
+      throw new Error("Motion check could not parse the transcript analysis. Please try again.");
+    }
+    const toStrArr = (v: unknown) =>
+      Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [];
+    const unrecorded = toStrArr(parsed.unrecorded);
+    const unspoken = toStrArr(parsed.unspoken);
+    const matched = Number.isFinite(Number(parsed.matched))
+      ? Number(parsed.matched)
+      : Math.max(0, recorded.length - unspoken.length);
+
+    return { transcript: true, matched, unrecorded, unspoken, recordedCount: recorded.length };
+  });

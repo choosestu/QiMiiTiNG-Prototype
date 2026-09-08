@@ -56,6 +56,21 @@ export const AGENDA_SYSTEM_PROMPT =
   "Do not use em dashes (the '—' character); use hyphens, colons, or commas instead. " +
   "Output plain text only (no markdown, no bullets other than simple '- ' lines).";
 
+export const MOTION_CHECK_SYSTEM_PROMPT =
+  "You reconcile a meeting transcript against the list of formally recorded motions. " +
+  "In the transcript, a motion is proposed with language like 'I move that', 'I move to', " +
+  "'motion to', 'so moved', or acknowledged with 'seconded' / 'I second'. Identify the motions " +
+  "actually moved in the transcript and match them, by MEANING (not exact wording), to the recorded " +
+  "motions provided. " +
+  "Return ONLY strict JSON, no prose and no markdown, in exactly this shape: " +
+  '{"unrecorded": ["short description of each motion moved in the transcript that has no matching recorded motion"], ' +
+  '"unspoken": ["the recorded motion text for each recorded motion not reflected anywhere in the transcript"], ' +
+  '"matched": <integer count of recorded motions that were matched to the transcript>}. ' +
+  "If the transcript contains no motions and there are no recorded motions, return " +
+  '{"unrecorded": [], "unspoken": [], "matched": 0}. Be conservative: only list an item under ' +
+  "'unrecorded' when the transcript clearly contains a motion, and under 'unspoken' when a recorded " +
+  "motion is clearly absent from the discussion.";
+
 export const MINUTES_SYSTEM_PROMPT =
   "You are a parliamentary secretary drafting formal meeting minutes. " +
   "Follow Robert's Rules of Order for minutes format. " +

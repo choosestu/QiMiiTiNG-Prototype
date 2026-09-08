@@ -23,6 +23,7 @@ import {
   listFinancialReportRequestRecipients,
   uploadApprovedMinutes,
   importFieldyTranscript,
+  checkMotionsAgainstTranscript,
   draftMinutes,
   approveMinutes,
 } from "@/lib/google.functions";
@@ -159,6 +160,48 @@ function MeetingPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false);
   const [membershipQuorumConfirmed, setMembershipQuorumConfirmed] = useState(false);
+
+  // Transcript-aware pre-adjournment motion cross-check (additive; read-only).
+  const runMotionCheck = useServerFn(checkMotionsAgainstTranscript);
+  const importFieldy = useServerFn(importFieldyTranscript);
+  const [motionCheck, setMotionCheck] = useState<{
+    transcript: boolean;
+    matched: number;
+    unrecorded: string[];
+    unspoken: string[];
+    recordedCount: number;
+  } | null>(null);
+  const [motionCheckBusy, setMotionCheckBusy] = useState<"import" | "check" | null>(null);
+
+  const doMotionCheck = async () => {
+    setMotionCheckBusy("check");
+    try {
+      setMotionCheck(await runMotionCheck({ data: { meetingId } }));
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
+    } finally {
+      setMotionCheckBusy(null);
+    }
+  };
+
+  const doImportThenCheck = async () => {
+    setMotionCheckBusy("import");
+    try {
+      const r = await importFieldy({ data: { meetingId } });
+      toast.success(`Imported ${r.imported} transcript segment(s) from Fieldy`);
+      setMotionCheckBusy("check");
+      setMotionCheck(await runMotionCheck({ data: { meetingId } }));
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      toast.error(
+        msg.includes("FIELDY_API_KEY")
+          ? "Fieldy is not configured (FIELDY_API_KEY missing in the environment)."
+          : msg,
+      );
+    } finally {
+      setMotionCheckBusy(null);
+    }
+  };
 
   const refresh = useCallback(async () => {
     const [m, a, mo, rp] = await Promise.all([
@@ -415,6 +458,26 @@ function MeetingPage() {
     meeting.status === "agenda_generated" ||
     meeting.status === "reports_open";
   const canAdjourn = meeting.status === "in_progress";
+  // Fourth, transcript-aware check. Only a real detected mismatch blocks
+  // adjournment; "not run" and "no transcript" stay non-blocking so a meeting
+  // without Fieldy can still adjourn on the original three checks.
+  const motionCheckItem: { label: string; ok: boolean } = !motionCheck
+    ? {
+        label: "Transcript motion cross-check: not run (optional). Import a transcript and run the check below.",
+        ok: true,
+      }
+    : !motionCheck.transcript
+      ? { label: "Transcript motion cross-check: no transcript imported (skipped).", ok: true }
+      : motionCheck.unrecorded.length === 0 && motionCheck.unspoken.length === 0
+        ? {
+            label: `Transcript motion cross-check: motions match the transcript (${motionCheck.matched} matched).`,
+            ok: true,
+          }
+        : {
+            label: `Transcript motion cross-check: ${motionCheck.unrecorded.length} moved but unrecorded, ${motionCheck.unspoken.length} recorded but not spoken (see below).`,
+            ok: false,
+          };
+
   const validations: { label: string; ok: boolean }[] = [
     {
       label: quorum.isMembership
@@ -427,6 +490,7 @@ function MeetingPage() {
       label: "All motions have mover, seconder, and a result",
       ok: motions.length === 0 || motions.every((m) => m.moved_by && m.seconded_by && m.result),
     },
+    motionCheckItem,
   ];
   const allValid = validations.every((v) => v.ok);
   const canCancel =
@@ -708,6 +772,78 @@ function MeetingPage() {
                     ))}
                   </ul>
                 </div>
+
+                <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+                  <p className="text-sm font-medium">Transcript motion check</p>
+                  <p className="text-xs text-muted-foreground">
+                    Import the latest Fieldy transcript and cross-check spoken motions against the
+                    recorded ones. You can run this at a break mid-meeting and again before
+                    adjourning.
+                    {meeting.fieldy_enabled ? "" : " Fieldy is not enabled for this meeting."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={motionCheckBusy !== null || !meeting.fieldy_enabled}
+                      onClick={doImportThenCheck}
+                    >
+                      {motionCheckBusy === "import" ? "Importing…" : "Import transcript & check"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={motionCheckBusy !== null}
+                      onClick={doMotionCheck}
+                    >
+                      {motionCheckBusy === "check" ? "Checking…" : "Re-check motions"}
+                    </Button>
+                  </div>
+                  {motionCheck && !motionCheck.transcript && (
+                    <p className="text-xs text-muted-foreground">
+                      No transcript imported yet. Import one to run the cross-check.
+                    </p>
+                  )}
+                  {motionCheck &&
+                    motionCheck.transcript &&
+                    motionCheck.unrecorded.length === 0 &&
+                    motionCheck.unspoken.length === 0 && (
+                      <p className="text-xs text-primary">
+                        All {motionCheck.matched} recorded motion(s) match the transcript.
+                      </p>
+                    )}
+                  {motionCheck &&
+                    motionCheck.transcript &&
+                    (motionCheck.unrecorded.length > 0 || motionCheck.unspoken.length > 0) && (
+                      <div className="space-y-2 text-xs">
+                        {motionCheck.unrecorded.length > 0 && (
+                          <div>
+                            <span className="font-medium text-destructive">
+                              Moved in the transcript but not recorded:
+                            </span>
+                            <ul className="ml-4 list-disc">
+                              {motionCheck.unrecorded.map((t, i) => (
+                                <li key={`u${i}`}>{t}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {motionCheck.unspoken.length > 0 && (
+                          <div>
+                            <span className="font-medium text-destructive">
+                              Recorded but not found in the transcript:
+                            </span>
+                            <ul className="ml-4 list-disc">
+                              {motionCheck.unspoken.map((t, i) => (
+                                <li key={`s${i}`}>{t}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                </div>
+
                 <Button
                   variant={allValid ? "default" : "secondary"}
                   onClick={() => transition("adjourned")}
