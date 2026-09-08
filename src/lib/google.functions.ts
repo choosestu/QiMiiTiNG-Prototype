@@ -781,7 +781,7 @@ export const draftMinutes = createServerFn({ method: "POST" })
       supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
       supabase
         .from("attendees")
-        .select("user_id, present, attendance_status, position_holder_id")
+        .select("user_id, present, attendance_status, position_holder_id, arrived_at")
         .eq("meeting_id", data.meetingId),
       supabase
         .from("motions")
@@ -841,9 +841,29 @@ export const draftMinutes = createServerFn({ method: "POST" })
       return "Absent";
     };
 
-    const attendanceLines = (attendeesRaw ?? []).map(
-      (a: any) => `- ${seatName(a)}: ${labelFor(a)}`,
-    );
+    // Format an arrival timestamp in the association's local (Eastern) time, matching
+    // what the attendance UI shows, so a Late arrival time reaches the minutes.
+    const fmtArrival = (iso: string | null): string => {
+      if (!iso) return "";
+      try {
+        return new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "America/Toronto",
+        }).format(new Date(iso));
+      } catch {
+        return "";
+      }
+    };
+    const attendanceLines = (attendeesRaw ?? []).map((a: any) => {
+      const st = (a.attendance_status as string) ?? (a.present ? "present" : "absent");
+      if (st === "late" && a.arrived_at) {
+        const t = fmtArrival(a.arrived_at);
+        return `- ${seatName(a)}: Late${t ? ` (arrived at ${t})` : ""}`;
+      }
+      return `- ${seatName(a)}: ${labelFor(a)}`;
+    });
     const reportLines = (reportsRaw ?? []).map(
       (r: any) =>
         `- ${nameOf(r.user_id)}${r.bank_balance != null ? ` [Bank balance: $${r.bank_balance}]` : ""}: ${r.report_text}`,

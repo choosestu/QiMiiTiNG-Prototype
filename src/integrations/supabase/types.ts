@@ -135,6 +135,7 @@ export type Database = {
           meeting_id: string
           position_holder_id: string | null
           present: boolean
+          regrets_reason: string | null
           user_id: string | null
         }
         Insert: {
@@ -144,6 +145,7 @@ export type Database = {
           meeting_id: string
           position_holder_id?: string | null
           present?: boolean
+          regrets_reason?: string | null
           user_id?: string | null
         }
         Update: {
@@ -153,6 +155,7 @@ export type Database = {
           meeting_id?: string
           position_holder_id?: string | null
           present?: boolean
+          regrets_reason?: string | null
           user_id?: string | null
         }
         Relationships: [

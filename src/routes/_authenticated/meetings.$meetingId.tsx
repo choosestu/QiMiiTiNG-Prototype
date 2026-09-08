@@ -103,6 +103,7 @@ type Attendee = {
   present: boolean;
   attendance_status: AttendanceStatus;
   arrived_at: string | null;
+  regrets_reason: string | null;
 };
 type ReportKind = "officer" | "financial" | null;
 // A filled position seat on the real roster (demo seats excluded). Attendance and
@@ -161,6 +162,10 @@ function MeetingPage() {
   const [busy, setBusy] = useState(false);
   const [membershipQuorumConfirmed, setMembershipQuorumConfirmed] = useState(false);
 
+  // Self-service Regrets: a member sending their own regrets, with an optional reason.
+  const [regretsSeat, setRegretsSeat] = useState<Seat | null>(null);
+  const [regretsReason, setRegretsReason] = useState("");
+
   // Transcript-aware pre-adjournment motion cross-check (additive; read-only).
   const runMotionCheck = useServerFn(checkMotionsAgainstTranscript);
   const importFieldy = useServerFn(importFieldyTranscript);
@@ -208,7 +213,7 @@ function MeetingPage() {
       supabase.from("meetings").select("*").eq("id", meetingId).maybeSingle(),
       supabase
         .from("attendees")
-        .select("id, user_id, position_holder_id, present, attendance_status, arrived_at")
+        .select("id, user_id, position_holder_id, present, attendance_status, arrived_at, regrets_reason")
         .eq("meeting_id", meetingId),
       supabase
         .from("motions")
@@ -361,13 +366,13 @@ function MeetingPage() {
     );
   }
 
-  const editable =
-    isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
+  const meetingOpen = meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
+  const editable = isAdmin && meetingOpen;
 
   // Attendance is recorded per seat (position_holder). Present and Late both count
   // as "in the room" for quorum; the present flag is kept in sync. user_id is set
   // too when the seat has a login (so motions/reports keep resolving names).
-  const setAttendance = async (seat: Seat, status: AttendanceStatus) => {
+  const setAttendance = async (seat: Seat, status: AttendanceStatus, reason?: string) => {
     setBusy(true);
     const present = status === "present" || status === "late";
     const existing =
@@ -375,6 +380,9 @@ function MeetingPage() {
       (seat.loginUserId ? attendees.find((a) => a.user_id === seat.loginUserId) : undefined);
     const arrived_at =
       status === "late" ? (existing?.arrived_at ?? new Date().toISOString()) : null;
+    // Only Regrets carries a reason; clearing to any other status drops it.
+    const regrets_reason =
+      status === "regrets" ? (reason && reason.trim() ? reason.trim() : null) : null;
     if (existing) {
       const { error } = await supabase
         .from("attendees")
@@ -382,6 +390,7 @@ function MeetingPage() {
           attendance_status: status,
           present,
           arrived_at,
+          regrets_reason,
           position_holder_id: seat.holderId,
           user_id: seat.loginUserId,
         })
@@ -396,6 +405,7 @@ function MeetingPage() {
                   attendance_status: status,
                   present,
                   arrived_at,
+                  regrets_reason,
                   position_holder_id: seat.holderId,
                   user_id: seat.loginUserId,
                 }
@@ -412,13 +422,24 @@ function MeetingPage() {
           present,
           attendance_status: status,
           arrived_at,
+          regrets_reason,
         })
-        .select("id, user_id, position_holder_id, present, attendance_status, arrived_at")
+        .select("id, user_id, position_holder_id, present, attendance_status, arrived_at, regrets_reason")
         .single();
       if (error) toast.error(error.message);
       else if (data) setAttendees((prev) => [...prev, data as Attendee]);
     }
     setBusy(false);
+  };
+
+  // A member confirms their own Regrets (reason optional; empty is fine).
+  const submitRegrets = async () => {
+    if (!regretsSeat) return;
+    const seat = regretsSeat;
+    const reason = regretsReason;
+    setRegretsSeat(null);
+    setRegretsReason("");
+    await setAttendance(seat, "regrets", reason);
   };
 
   const transition = async (
@@ -628,6 +649,9 @@ function MeetingPage() {
                   ? attendees.find((x) => x.user_id === seat.loginUserId)
                   : undefined);
               const status = a?.attendance_status ?? "absent";
+              const isOwnSeat = !!seat.loginUserId && seat.loginUserId === profile.id;
+              // Narrow exception: any member may send Regrets on their OWN row.
+              const canSelfRegret = isOwnSeat && meetingOpen;
               return (
                 <div
                   key={seat.holderId}
@@ -643,22 +667,37 @@ function MeetingPage() {
                       {status === "late" && a?.arrived_at
                         ? ` · arrived ${format(new Date(a.arrived_at), "h:mm a")}`
                         : ""}
+                      {status === "regrets" && a?.regrets_reason
+                        ? ` · reason: ${a.regrets_reason}`
+                        : ""}
                     </span>
                   </span>
                   <div className="flex shrink-0 flex-wrap gap-1">
-                    {(["present", "late", "regrets", "absent"] as AttendanceStatus[]).map((s) => (
-                      <Button
-                        key={s}
-                        type="button"
-                        size="sm"
-                        variant={status === s ? "default" : "outline"}
-                        disabled={!editable || busy}
-                        className="h-7 px-2 text-xs capitalize"
-                        onClick={() => setAttendance(seat, s)}
-                      >
-                        {s}
-                      </Button>
-                    ))}
+                    {(["present", "late", "regrets", "absent"] as AttendanceStatus[]).map((s) => {
+                      const allowed = editable || (s === "regrets" && canSelfRegret);
+                      return (
+                        <Button
+                          key={s}
+                          type="button"
+                          size="sm"
+                          variant={status === s ? "default" : "outline"}
+                          disabled={!allowed || busy}
+                          className="h-7 px-2 text-xs capitalize"
+                          onClick={() => {
+                            // A member (or the Chair) sending regrets on their own row
+                            // gets the optional-reason prompt; everything else is direct.
+                            if (s === "regrets" && isOwnSeat) {
+                              setRegretsSeat(seat);
+                              setRegretsReason(a?.regrets_reason ?? "");
+                            } else {
+                              setAttendance(seat, s);
+                            }
+                          }}
+                        >
+                          {s}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -666,6 +705,45 @@ function MeetingPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={regretsSeat !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRegretsSeat(null);
+            setRegretsReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send your regrets</DialogTitle>
+            <DialogDescription>Would you like to share your reason?</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              rows={3}
+              placeholder="Optional. For example: travelling, work conflict. You can leave this blank."
+              value={regretsReason}
+              onChange={(e) => setRegretsReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRegretsSeat(null);
+                setRegretsReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void submitRegrets()} disabled={busy}>
+              Record regrets
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ReportsCard
         meeting={meeting}
