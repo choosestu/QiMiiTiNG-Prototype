@@ -230,6 +230,7 @@ export const generateAgenda = createServerFn({ method: "POST" })
         .select("id, title, meeting_date")
         .eq("organization_id", orgId)
         .lt("meeting_date", meeting.meeting_date)
+        .not("title", "ilike", "[DEMO]%") // real agendas never reference demo meetings
         .order("meeting_date", { ascending: false })
         .limit(1)
         .maybeSingle(),
