@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
@@ -38,6 +39,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof AuthenticatedChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/workspace': typeof AuthenticatedWorkspaceRoute
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof AuthenticatedCalendarRoute
   '/chat': typeof AuthenticatedChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/workspace': typeof AuthenticatedWorkspaceRoute
   '/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
   '/_authenticated/meetings/$meetingId': typeof AuthenticatedMeetingsMeetingIdRoute
   '/_authenticated/positions/$positionId': typeof AuthenticatedPositionsPositionIdRoute
   '/_authenticated/settings/allowlist': typeof AuthenticatedSettingsAllowlistRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/settings'
+    | '/workspace'
     | '/meetings/$meetingId'
     | '/positions/$positionId'
     | '/settings/allowlist'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/chat'
     | '/dashboard'
+    | '/workspace'
     | '/meetings/$meetingId'
     | '/positions/$positionId'
     | '/settings/allowlist'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chat'
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
+    | '/_authenticated/workspace'
     | '/_authenticated/meetings/$meetingId'
     | '/_authenticated/positions/$positionId'
     | '/_authenticated/settings/allowlist'
@@ -235,6 +247,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/workspace': {
+      id: '/_authenticated/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof AuthenticatedWorkspaceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -346,6 +365,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRouteWithChildren
+  AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
   AuthenticatedMeetingsMeetingIdRoute: typeof AuthenticatedMeetingsMeetingIdRoute
   AuthenticatedPositionsPositionIdRoute: typeof AuthenticatedPositionsPositionIdRoute
   AuthenticatedPositionsIndexRoute: typeof AuthenticatedPositionsIndexRoute
@@ -357,6 +377,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRouteWithChildren,
+  AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
   AuthenticatedMeetingsMeetingIdRoute: AuthenticatedMeetingsMeetingIdRoute,
   AuthenticatedPositionsPositionIdRoute: AuthenticatedPositionsPositionIdRoute,
   AuthenticatedPositionsIndexRoute: AuthenticatedPositionsIndexRoute,

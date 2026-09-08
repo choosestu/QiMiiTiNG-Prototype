@@ -17,8 +17,10 @@ import {
   generateAgenda,
   sendMeetingNotice,
   sendOfficerReportRequest,
+  sendFinancialReportRequest,
   listMeetingNoticeRecipients,
   listOfficerReportRequestRecipients,
+  listFinancialReportRequestRecipients,
   uploadApprovedMinutes,
   importFieldyTranscript,
   draftMinutes,
@@ -95,10 +97,25 @@ type OrgUser = { id: string; name: string; email: string };
 type AttendanceStatus = "present" | "late" | "regrets" | "absent";
 type Attendee = {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  position_holder_id: string | null;
   present: boolean;
   attendance_status: AttendanceStatus;
   arrived_at: string | null;
+};
+type ReportKind = "officer" | "financial" | null;
+// A filled position seat on the real roster (demo seats excluded). Attendance and
+// quorum are computed per seat, not per app account.
+type Seat = {
+  holderId: string;
+  positionId: string;
+  title: string;
+  category: string;
+  reportKind: ReportKind;
+  holderName: string;
+  loginUserId: string | null;
+  loginEmail: string | null;
+  displayOrder: number;
 };
 type Motion = {
   id: string;
@@ -137,9 +154,7 @@ function MeetingPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
-  const [holders, setHolders] = useState<
-    { user_id: string; category: string; submits_report: boolean }[]
-  >([]);
+  const [seats, setSeats] = useState<Seat[]>([]);
   const [motions, setMotions] = useState<Motion[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false);
@@ -150,7 +165,7 @@ function MeetingPage() {
       supabase.from("meetings").select("*").eq("id", meetingId).maybeSingle(),
       supabase
         .from("attendees")
-        .select("id, user_id, present, attendance_status, arrived_at")
+        .select("id, user_id, position_holder_id, present, attendance_status, arrived_at")
         .eq("meeting_id", meetingId),
       supabase
         .from("motions")
@@ -177,85 +192,112 @@ function MeetingPage() {
       .select("id, name, email")
       .order("name")
       .then(({ data }) => setUsers((data ?? []) as OrgUser[]));
-    // Current position holders, classified for By-law 2 Section 8.5 quorum.
-    supabase
-      .from("position_holders")
-      .select("current_login_user_id, positions(category, submits_report)")
-      .is("term_end", null)
-      .then(({ data }) => {
-        const rows = (data ?? []) as unknown as {
-          current_login_user_id: string | null;
-          positions: { category: string; submits_report: boolean } | null;
-        }[];
-        setHolders(
-          rows
-            .filter((r) => r.current_login_user_id && r.positions)
-            .map((r) => ({
-              user_id: r.current_login_user_id as string,
-              category: r.positions!.category,
-              submits_report: r.positions!.submits_report,
-            })),
-        );
-      });
+    // The real roster: filled seats, demo seats excluded. Attendance and By-law 2
+    // Section 8.5 quorum are computed from these seats, not from app accounts.
+    void loadSeats();
   }, [profile, refresh]);
 
-  // Ensure an attendee row per org user once meeting + users loaded (admin only, before adjournment).
-  useEffect(() => {
-    if (!isAdmin || !meeting || users.length === 0) return;
-    if (meeting.status === "adjourned" || meeting.status === "minutes_approved") return;
-    const missing = users.filter((u) => !attendees.some((a) => a.user_id === u.id));
-    if (missing.length === 0) return;
-    supabase
-      .from("attendees")
-      .insert(missing.map((u) => ({ meeting_id: meetingId, user_id: u.id, present: false })))
-      .then(({ error }) => {
-        if (error) return;
-        refresh();
-      });
-  }, [isAdmin, meeting, users, attendees, meetingId, refresh]);
+  const loadSeats = async () => {
+    const { data } = await supabase
+      .from("position_holders")
+      .select(
+        "id, holder_name, current_login_user_id, position_id, positions!inner(title, category, report_kind, display_order)",
+      )
+      .is("term_end", null)
+      .eq("is_demo", false);
+    const rows = (data ?? []) as unknown as {
+      id: string;
+      holder_name: string | null;
+      current_login_user_id: string | null;
+      position_id: string;
+      positions: {
+        title: string;
+        category: string;
+        report_kind: ReportKind;
+        display_order: number;
+      } | null;
+    }[];
+    const loginIds = rows
+      .map((r) => r.current_login_user_id)
+      .filter((id): id is string => !!id);
+    const { data: loginUsers } = loginIds.length
+      ? await supabase.from("users").select("id, name, email").in("id", loginIds)
+      : { data: [] as OrgUser[] };
+    const byId = new Map((loginUsers ?? []).map((u) => [u.id, u as OrgUser]));
+    const built: Seat[] = rows
+      .filter((r) => r.positions)
+      .map((r) => {
+        const u = r.current_login_user_id ? byId.get(r.current_login_user_id) : undefined;
+        return {
+          holderId: r.id,
+          positionId: r.position_id,
+          title: r.positions!.title,
+          category: r.positions!.category,
+          reportKind: r.positions!.report_kind,
+          holderName: r.holder_name || u?.name || "Vacant",
+          loginUserId: r.current_login_user_id,
+          loginEmail: u?.email ?? null,
+          displayOrder: r.positions!.display_order,
+        };
+      })
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+    setSeats(built);
+  };
 
-  const presentCount = useMemo(() => attendees.filter((a) => a.present).length, [attendees]);
+  // Attendance status for a seat: prefer a row keyed to the seat; fall back to the
+  // seat's linked login (so legacy/demo attendee rows still render).
+  const statusForSeat = useCallback(
+    (seat: Seat): AttendanceStatus => {
+      const byHolder = attendees.find((a) => a.position_holder_id === seat.holderId);
+      if (byHolder) return byHolder.attendance_status;
+      if (seat.loginUserId) {
+        const byUser = attendees.find((a) => a.user_id === seat.loginUserId);
+        if (byUser) return byUser.attendance_status;
+      }
+      return "absent";
+    },
+    [attendees],
+  );
 
   // Quorum per LPC By-law 2. Executive/special meetings use Section 8.5 (20% of
   // voting Directors and Officers AND 50% of the elected officers, excluding
-  // vacancies). AGM/membership meetings use Section 10.7, which depends on riding
-  // membership the app can't count, so the Chair confirms it manually.
+  // vacancies). Totals come from the real roster of filled seats; a seat counts
+  // present when its attendance is marked present or late, regardless of whether
+  // the seat-holder has an app login. AGM/membership meetings use Section 10.7,
+  // which depends on riding membership the app can't count, so the Chair confirms.
   const quorum = useMemo(() => {
-    const presentIds = new Set(attendees.filter((a) => a.present).map((a) => a.user_id));
-    const votingBoard = new Set(
-      holders
-        .filter((h) => h.category === "elected_officer" || h.category === "director_at_large")
-        .map((h) => h.user_id),
+    const seatPresent = (s: Seat) => {
+      const st = statusForSeat(s);
+      return st === "present" || st === "late";
+    };
+    const officers = seats.filter((s) => s.category === "elected_officer");
+    const votingBoard = seats.filter(
+      (s) => s.category === "elected_officer" || s.category === "director_at_large",
     );
-    const officers = new Set(
-      holders.filter((h) => h.category === "elected_officer").map((h) => h.user_id),
-    );
-    const presentVoting = [...votingBoard].filter((id) => presentIds.has(id)).length;
-    const presentOfficers = [...officers].filter((id) => presentIds.has(id)).length;
-    const reqVoting = Math.ceil(0.2 * votingBoard.size);
-    const reqOfficers = Math.ceil(0.5 * officers.size);
+    const presentOfficers = officers.filter(seatPresent).length;
+    const presentVoting = votingBoard.filter(seatPresent).length;
+    const reqVoting = Math.ceil(0.2 * votingBoard.length);
+    const reqOfficers = Math.ceil(0.5 * officers.length);
     const isMembership = meeting?.meeting_type === "agm";
     const execMet =
-      votingBoard.size > 0 && presentVoting >= reqVoting && presentOfficers >= reqOfficers;
+      votingBoard.length > 0 && presentVoting >= reqVoting && presentOfficers >= reqOfficers;
     return {
       isMembership,
-      votingBoardTotal: votingBoard.size,
-      officersTotal: officers.size,
+      votingBoardTotal: votingBoard.length,
+      officersTotal: officers.length,
       presentVoting,
       presentOfficers,
       reqVoting,
       reqOfficers,
       met: isMembership ? membershipQuorumConfirmed : execMet,
     };
-  }, [attendees, holders, meeting, membershipQuorumConfirmed]);
+  }, [seats, statusForSeat, meeting, membershipQuorumConfirmed]);
   const quorumMet = quorum.met;
 
-  // Only these positions submit formal officer reports (per org configuration);
-  // everyone else contributes agenda items instead.
-  const reportingUserIds = useMemo(
-    () => new Set(holders.filter((h) => h.submits_report).map((h) => h.user_id)),
-    [holders],
-  );
+  // Report seats by kind: officer report (Chair, Vice-Chair, Organization Chair,
+  // Policy Chair) and financial report (Treasurer). Secretary submits neither.
+  const officerSeats = useMemo(() => seats.filter((s) => s.reportKind === "officer"), [seats]);
+  const financialSeats = useMemo(() => seats.filter((s) => s.reportKind === "financial"), [seats]);
 
   if (loading || !profile) {
     return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
@@ -279,25 +321,59 @@ function MeetingPage() {
   const editable =
     isAdmin && meeting.status !== "adjourned" && meeting.status !== "minutes_approved";
 
-  const setAttendance = async (userId: string, status: AttendanceStatus) => {
+  // Attendance is recorded per seat (position_holder). Present and Late both count
+  // as "in the room" for quorum; the present flag is kept in sync. user_id is set
+  // too when the seat has a login (so motions/reports keep resolving names).
+  const setAttendance = async (seat: Seat, status: AttendanceStatus) => {
     setBusy(true);
-    const existing = attendees.find((a) => a.user_id === userId);
+    const present = status === "present" || status === "late";
+    const existing =
+      attendees.find((a) => a.position_holder_id === seat.holderId) ??
+      (seat.loginUserId ? attendees.find((a) => a.user_id === seat.loginUserId) : undefined);
+    const arrived_at =
+      status === "late" ? (existing?.arrived_at ?? new Date().toISOString()) : null;
     if (existing) {
-      // Present and Late both count as "in the room" for quorum; keep the present
-      // flag in sync so quorum and other consumers keep working unchanged.
-      const present = status === "present" || status === "late";
-      const arrived_at =
-        status === "late" ? (existing.arrived_at ?? new Date().toISOString()) : null;
       const { error } = await supabase
         .from("attendees")
-        .update({ attendance_status: status, present, arrived_at })
+        .update({
+          attendance_status: status,
+          present,
+          arrived_at,
+          position_holder_id: seat.holderId,
+          user_id: seat.loginUserId,
+        })
         .eq("id", existing.id);
       if (error) toast.error(error.message);
-      setAttendees((prev) =>
-        prev.map((a) =>
-          a.id === existing.id ? { ...a, attendance_status: status, present, arrived_at } : a,
-        ),
-      );
+      else
+        setAttendees((prev) =>
+          prev.map((a) =>
+            a.id === existing.id
+              ? {
+                  ...a,
+                  attendance_status: status,
+                  present,
+                  arrived_at,
+                  position_holder_id: seat.holderId,
+                  user_id: seat.loginUserId,
+                }
+              : a,
+          ),
+        );
+    } else {
+      const { data, error } = await supabase
+        .from("attendees")
+        .insert({
+          meeting_id: meetingId,
+          position_holder_id: seat.holderId,
+          user_id: seat.loginUserId,
+          present,
+          attendance_status: status,
+          arrived_at,
+        })
+        .select("id, user_id, position_holder_id, present, attendance_status, arrived_at")
+        .single();
+      if (error) toast.error(error.message);
+      else if (data) setAttendees((prev) => [...prev, data as Attendee]);
     }
     setBusy(false);
   };
@@ -476,23 +552,30 @@ function MeetingPage() {
               Chair confirms quorum is present (By-law 2 Section 10.7)
             </label>
           )}
-          {users.length === 0 ? (
+          {seats.length === 0 ? (
             <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-              No officers found in this organization yet.
+              No filled positions on the roster yet.
             </p>
           ) : (
-            users.map((u) => {
-              const a = attendees.find((x) => x.user_id === u.id);
+            seats.map((seat) => {
+              const a =
+                attendees.find((x) => x.position_holder_id === seat.holderId) ??
+                (seat.loginUserId
+                  ? attendees.find((x) => x.user_id === seat.loginUserId)
+                  : undefined);
               const status = a?.attendance_status ?? "absent";
               return (
                 <div
-                  key={u.id}
+                  key={seat.holderId}
                   className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
                 >
                   <span className="min-w-0 flex-1 text-sm">
-                    <span className="block truncate">{u.name}</span>
+                    <span className="block truncate">
+                      {seat.holderName}{" "}
+                      <span className="text-muted-foreground">· {seat.title}</span>
+                    </span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {u.email}
+                      {seat.loginEmail ?? "no app login"}
                       {status === "late" && a?.arrived_at
                         ? ` · arrived ${format(new Date(a.arrived_at), "h:mm a")}`
                         : ""}
@@ -507,7 +590,7 @@ function MeetingPage() {
                         variant={status === s ? "default" : "outline"}
                         disabled={!editable || busy}
                         className="h-7 px-2 text-xs capitalize"
-                        onClick={() => setAttendance(u.id, s)}
+                        onClick={() => setAttendance(seat, s)}
                       >
                         {s}
                       </Button>
@@ -522,9 +605,9 @@ function MeetingPage() {
 
       <ReportsCard
         meeting={meeting}
-        users={users}
+        officerSeats={officerSeats}
+        financialSeats={financialSeats}
         reports={reports}
-        reportingUserIds={reportingUserIds}
         currentUserId={profile.id}
         isAdmin={isAdmin}
         onUpdate={refresh}
@@ -537,7 +620,12 @@ function MeetingPage() {
             <CardDescription>Recorded verbatim as moved.</CardDescription>
           </div>
           {editable && meeting.status === "in_progress" && (
-            <AddMotionDialog users={users} meetingId={meetingId} onAdded={refresh} />
+            <AddMotionDialog
+              users={users}
+              meetingId={meetingId}
+              organizationId={meeting.organization_id}
+              onAdded={refresh}
+            />
           )}
         </CardHeader>
         <CardContent className="space-y-3">
@@ -923,6 +1011,28 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
           before distribution — the chair is responsible for the final content.
         </p>
 
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Find in the Workspace account
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/workspace" search={{ q: "agenda" }}>
+                <FileText className="mr-1 size-4" /> Agenda
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/workspace" search={{ q: "minutes" }}>
+                <FileText className="mr-1 size-4" /> Previous Minutes
+              </Link>
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Searches Drive and Gmail on the connected account — pull up any prior agenda, minutes, or
+            related correspondence on demand.
+          </p>
+        </div>
+
         <div className="space-y-1 text-sm">
           {meeting.agenda_url && (
             <a
@@ -931,7 +1041,7 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
               rel="noreferrer"
               className="flex items-center gap-1 text-primary hover:underline"
             >
-              <ExternalLink className="size-3" /> Agenda.pdf
+              <ExternalLink className="size-3" /> Agenda.pdf (this meeting)
             </a>
           )}
           {meeting.minutes_approved_url && (
@@ -941,7 +1051,7 @@ function WorkspaceCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () =
               rel="noreferrer"
               className="flex items-center gap-1 text-primary hover:underline"
             >
-              <ExternalLink className="size-3" /> Minutes-Approved.pdf
+              <ExternalLink className="size-3" /> Minutes-Approved.pdf (this meeting)
             </a>
           )}
         </div>
@@ -1110,10 +1220,12 @@ function MotionRow({
 function AddMotionDialog({
   users,
   meetingId,
+  organizationId,
   onAdded,
 }: {
   users: OrgUser[];
   meetingId: string;
+  organizationId: string;
   onAdded: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1129,6 +1241,7 @@ function AddMotionDialog({
     }
     setBusy(true);
     const { error } = await supabase.from("motions").insert({
+      organization_id: organizationId,
       meeting_id: meetingId,
       motion_text: text.trim(),
       moved_by: moved || null,
@@ -1212,25 +1325,28 @@ function AddMotionDialog({
 
 function ReportsCard({
   meeting,
-  users,
+  officerSeats,
+  financialSeats,
   reports,
-  reportingUserIds,
   currentUserId,
   isAdmin,
   onUpdate,
 }: {
   meeting: Meeting;
-  users: OrgUser[];
+  officerSeats: Seat[];
+  financialSeats: Seat[];
   reports: Report[];
-  reportingUserIds: Set<string>;
   currentUserId: string;
   isAdmin: boolean;
   onUpdate: () => void;
 }) {
-  const requestReports = useServerFn(sendOfficerReportRequest);
-  const listReportRecipients = useServerFn(listOfficerReportRequestRecipients);
+  const requestOfficer = useServerFn(sendOfficerReportRequest);
+  const requestFinancial = useServerFn(sendFinancialReportRequest);
+  const listOfficerRecipients = useServerFn(listOfficerReportRequestRecipients);
+  const listFinancialRecipients = useServerFn(listFinancialReportRequestRecipients);
   const [requestBusy, setRequestBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingKind, setPendingKind] = useState<"officer" | "financial" | null>(null);
   const [previewRecipients, setPreviewRecipients] = useState<EmailRecipientPreview[]>([]);
   const reportsOpen =
     meeting.status === "reports_open" ||
@@ -1238,21 +1354,27 @@ function ReportsCard({
     meeting.status === "in_progress";
 
   const myReport = reports.find((r) => r.user_id === currentUserId);
-  const reporters = users.filter((u) => reportingUserIds.has(u.id));
-  const isReporter = reportingUserIds.has(currentUserId);
-  const visibleUsers = isAdmin ? reporters : reporters.filter((u) => u.id === currentUserId);
+  const allReportSeats = [...officerSeats, ...financialSeats];
+  const mySeat = allReportSeats.find((s) => s.loginUserId === currentUserId);
+  const isReporter = !!mySeat;
 
-  const openRequestConfirm = async () => {
+  const openRequestConfirm = async (kind: "officer" | "financial") => {
     setRequestBusy(true);
     try {
-      const listed = await listReportRecipients({ data: { meetingId: meeting.id } });
+      const listed =
+        kind === "officer"
+          ? await listOfficerRecipients({ data: { meetingId: meeting.id } })
+          : await listFinancialRecipients({ data: { meetingId: meeting.id } });
       if (!listed.recipients?.length) {
         toast.error(
-          "No reporting officers with email addresses. Assign submits_report positions or add emails.",
+          kind === "financial"
+            ? "No Treasurer with an email address on file."
+            : "No reporting officers with email addresses.",
         );
         return;
       }
       setPreviewRecipients(listed.recipients);
+      setPendingKind(kind);
       setConfirmOpen(true);
     } catch (e: any) {
       const msg = String(e?.message ?? e);
@@ -1264,12 +1386,19 @@ function ReportsCard({
     }
   };
 
-  const confirmRequestReports = async () => {
+  const confirmRequest = async () => {
+    const kind = pendingKind;
     setConfirmOpen(false);
+    if (!kind) return;
     setRequestBusy(true);
     try {
-      const r = await requestReports({ data: { meetingId: meeting.id } });
-      toast.success(`Officer report request sent to ${r.sent} recipient(s)`);
+      const r =
+        kind === "officer"
+          ? await requestOfficer({ data: { meetingId: meeting.id } })
+          : await requestFinancial({ data: { meetingId: meeting.id } });
+      toast.success(
+        `${kind === "financial" ? "Financial" : "Officer"} report request sent to ${r.sent} recipient(s)`,
+      );
       onUpdate();
     } catch (e: any) {
       const msg = String(e?.message ?? e);
@@ -1278,24 +1407,75 @@ function ReportsCard({
       else toast.error(msg);
     } finally {
       setRequestBusy(false);
+      setPendingKind(null);
     }
+  };
+
+  const SeatReportRow = ({ seat }: { seat: Seat }) => {
+    const r = seat.loginUserId ? reports.find((x) => x.user_id === seat.loginUserId) : undefined;
+    const isSelf = seat.loginUserId === currentUserId;
+    return (
+      <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-card px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{seat.holderName}</span>
+            <span className="text-xs text-muted-foreground">· {seat.title}</span>
+            {r ? (
+              <Badge variant="secondary" className="text-xs">
+                Submitted
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs">
+                Pending
+              </Badge>
+            )}
+          </div>
+          {r && (
+            <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
+              {r.report_text}
+              {r.bank_balance != null && (
+                <span className="ml-2 font-medium text-foreground">
+                  · Bank balance ${Number(r.bank_balance).toFixed(2)}
+                </span>
+              )}
+            </p>
+          )}
+          {!seat.loginEmail && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              No app login — this report is expected by email and picked up by the agenda scan.
+            </p>
+          )}
+        </div>
+        {isSelf && reportsOpen && isAdmin && (
+          <ReportDialog
+            meetingId={meeting.id}
+            organizationId={meeting.organization_id}
+            userId={currentUserId}
+            existing={r}
+            onSaved={onUpdate}
+            triggerLabel={r ? "Edit" : "Submit"}
+          />
+        )}
+      </div>
+    );
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Officer reports</CardTitle>
+        <CardTitle className="text-base">Officer &amp; financial reports</CardTitle>
         <CardDescription>
           {meeting.status === "scheduled"
             ? "Reports submission opens once the chair opens reports."
             : reportsOpen
-              ? "The reporting officers submit a written report for this meeting."
+              ? "Officer reports come from the Chair, Vice-Chair, Organization Chair, and Policy Chair; the Treasurer submits a separate financial report."
               : "Report submission is closed for this meeting."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-3">
         {!isAdmin && reportsOpen && isReporter && (
-          <div className="mb-2">
+          <div className="mb-1">
             <ReportDialog
               meetingId={meeting.id}
               organizationId={meeting.organization_id}
@@ -1307,67 +1487,57 @@ function ReportsCard({
           </div>
         )}
         {!isAdmin && !isReporter && (
-          <p className="mb-2 text-sm text-muted-foreground">
-            Formal reports are submitted by the reporting officers. You can raise items during New
-            Business at the meeting.
+          <p className="mb-1 text-sm text-muted-foreground">
+            Formal reports are submitted by the reporting officers and the Treasurer. You can raise
+            items during New Business at the meeting.
           </p>
         )}
-        {visibleUsers.map((u) => {
-          const r = reports.find((x) => x.user_id === u.id);
-          const isSelf = u.id === currentUserId;
-          return (
-            <div
-              key={u.id}
-              className="flex items-start justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{u.name}</span>
-                  {r ? (
-                    <Badge variant="secondary" className="text-xs">
-                      Submitted
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs">
-                      Pending
-                    </Badge>
-                  )}
-                </div>
-                {r && (
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
-                    {r.report_text}
-                    {r.bank_balance != null && (
-                      <span className="ml-2 font-medium text-foreground">
-                        · Bank balance ${Number(r.bank_balance).toFixed(2)}
-                      </span>
-                    )}
-                  </p>
-                )}
-              </div>
-              {isSelf && reportsOpen && isAdmin && (
-                <ReportDialog
-                  meetingId={meeting.id}
-                  organizationId={meeting.organization_id}
-                  userId={currentUserId}
-                  existing={r}
-                  onSaved={onUpdate}
-                  triggerLabel={r ? "Edit" : "Submit"}
-                />
+
+        {(isAdmin || isReporter) && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Officer reports</p>
+              {officerSeats.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No officer report seats configured.</p>
+              ) : (
+                (isAdmin ? officerSeats : officerSeats.filter((s) => s.loginUserId === currentUserId)).map(
+                  (seat) => <SeatReportRow key={seat.holderId} seat={seat} />,
+                )
               )}
             </div>
-          );
-        })}
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Financial report</p>
+              {financialSeats.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No Treasurer seat configured.</p>
+              ) : (
+                (isAdmin
+                  ? financialSeats
+                  : financialSeats.filter((s) => s.loginUserId === currentUserId)
+                ).map((seat) => <SeatReportRow key={seat.holderId} seat={seat} />)
+              )}
+            </div>
+          </div>
+        )}
+
         {isAdmin && reportsOpen && (
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             <Button
               size="sm"
               variant="secondary"
               disabled={requestBusy}
-              onClick={() => void openRequestConfirm()}
+              onClick={() => void openRequestConfirm("officer")}
             >
               <Mail className="mr-1 size-4" />
               {requestBusy ? "Sending…" : "Request officer reports"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={requestBusy}
+              onClick={() => void openRequestConfirm("financial")}
+            >
+              <Mail className="mr-1 size-4" />
+              Request financial report
             </Button>
             {reports.length > 0 && (
               <Button
@@ -1400,7 +1570,9 @@ function ReportsCard({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Request officer reports?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {pendingKind === "financial" ? "Request financial report?" : "Request officer reports?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               A separate Gmail message will be sent to each of the following{" "}
               {previewRecipients.length} recipient(s). Confirm to send.
@@ -1416,9 +1588,7 @@ function ReportsCard({
           </ul>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmRequestReports()}>
-              Confirm Send
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => void confirmRequest()}>Confirm Send</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

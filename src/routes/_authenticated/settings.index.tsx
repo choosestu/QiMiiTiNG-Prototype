@@ -8,10 +8,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   getGoogleStatus,
   startGoogleConnect,
   disconnectGoogle,
+  getOrgAgendaSettings,
+  setOrgAgendaLeadDays,
 } from "@/lib/google.functions";
 
 import { RouteErrorComponent, RouteNotFoundComponent } from "@/components/route-boundaries";
@@ -30,18 +34,25 @@ function SettingsPage() {
   const fetchStatus = useServerFn(getGoogleStatus);
   const connect = useServerFn(startGoogleConnect);
   const disconnect = useServerFn(disconnectGoogle);
+  const fetchAgenda = useServerFn(getOrgAgendaSettings);
+  const saveLeadDays = useServerFn(setOrgAgendaLeadDays);
 
   const [status, setStatus] = useState<{ connected: boolean; email: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [leadDays, setLeadDays] = useState<string>("5");
+  const [leadBusy, setLeadBusy] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
     fetchStatus().then(setStatus).catch((e) => toast.error(e.message));
+    fetchAgenda()
+      .then((r) => setLeadDays(String(r.agendaLeadDays)))
+      .catch(() => {});
     const params = new URLSearchParams(window.location.search);
     const g = params.get("google");
     if (g === "connected") toast.success("Google account connected.");
     else if (g?.startsWith("error:")) toast.error(`Google auth error: ${g.slice(6)}`);
-  }, [profile, fetchStatus]);
+  }, [profile, fetchStatus, fetchAgenda]);
 
   if (loading || !profile) return <p className="p-8 text-sm text-muted-foreground">Loading…</p>;
 
@@ -66,6 +77,19 @@ function SettingsPage() {
       toast.error(e.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onSaveLeadDays = async () => {
+    setLeadBusy(true);
+    try {
+      const r = await saveLeadDays({ data: { days: Number(leadDays) } });
+      setLeadDays(String(r.agendaLeadDays));
+      toast.success(`Agenda lead time set to ${r.agendaLeadDays} day(s).`);
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
+    } finally {
+      setLeadBusy(false);
     }
   };
 
@@ -124,11 +148,52 @@ function SettingsPage() {
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Scopes requested: <code>gmail.send</code>, <code>drive.file</code>, <code>openid</code>,{" "}
-            <code>email</code>. Drive access is restricted to files this app creates.
+            Scopes requested: <code>gmail.send</code>, <code>gmail.readonly</code>,{" "}
+            <code>calendar.readonly</code>, <code>drive.file</code>, <code>drive.readonly</code>,{" "}
+            <code>openid</code>, <code>email</code>. Read access powers the agenda pipeline (scanning
+            emailed reports and correspondence, referencing the calendar) and Workspace search. If you
+            connected before these were added, use <strong>Reconnect</strong> to grant them.
           </p>
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Agenda automation</CardTitle>
+            <CardDescription>
+              How many days before a meeting the agenda pipeline scans the connected Workspace account
+              (Gmail and Calendar) for emailed officer reports, agenda-worthy correspondence, and
+              upcoming dates.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-end gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="lead-days" className="text-xs">
+                  Lead time (days)
+                </Label>
+                <Input
+                  id="lead-days"
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={leadDays}
+                  onChange={(e) => setLeadDays(e.target.value)}
+                  className="w-28"
+                />
+              </div>
+              <Button variant="outline" onClick={onSaveLeadDays} disabled={leadBusy}>
+                {leadBusy ? "Saving…" : "Save"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The agenda is assembled when the Chair generates it (opening reports then generating the
+              agenda). Unattended scheduling on this lead time is a planned follow-up.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {isAdmin && (
         <Card>

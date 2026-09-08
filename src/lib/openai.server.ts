@@ -33,13 +33,20 @@ export async function openaiChat(args: {
 }
 
 export const AGENDA_SYSTEM_PROMPT =
-  "You are a parliamentary procedure assistant for a volunteer political organization. " +
-  "Generate a formal meeting agenda in accordance with Robert's Rules of Order. " +
-  "The organization follows LPC (Liberal Party of Canada) By-law 2 for meeting procedures. " +
-  "Required notice period: 72 hours. Quorum: 3 of 5 named officers must be present. " +
-  "Do not add items not present in the officer reports. Do not editorialize. " +
-  "Format: [Call to Order] [Approval of Previous Minutes] [Officer Reports — one per officer] " +
-  "[Business Arising] [New Business] [Adjournment]";
+  "You are a parliamentary procedure assistant for a volunteer political organization following " +
+  "LPC (Liberal Party of Canada) By-law 2 and Robert's Rules of Order. " +
+  "Build a formal meeting agenda ONLY from the material provided: in-app officer reports, officer " +
+  "reports submitted by email, agenda-worthy correspondence, upcoming calendar dates, and unresolved " +
+  "prior motions. Do not invent items and do not editorialize. " +
+  "From the correspondence provided, include items an executive would expect to see and omit obvious " +
+  "noise (newsletters, automated notifications, spam); when unsure, include it under New Business " +
+  "rather than dropping it silently. " +
+  "If told the previous minutes are not yet approved, you MUST include an 'Adoption of the Previous " +
+  "Minutes' item; if they are approved, use 'Approval of the Previous Minutes' as a formality. " +
+  "Use these section headings, each on its own line, in this order: Call to Order; Approval/Adoption " +
+  "of the Previous Minutes; Officer Reports (one per reporting officer); Financial Report (if a " +
+  "treasurer/financial report is present); Correspondence; Business Arising; New Business; Upcoming " +
+  "Dates (from the calendar); Adjournment. Output plain text only, no markdown.";
 
 export const MINUTES_SYSTEM_PROMPT =
   "You are a parliamentary secretary drafting formal meeting minutes. " +

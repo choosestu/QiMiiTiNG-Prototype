@@ -129,22 +129,31 @@ export type Database = {
       }
       attendees: {
         Row: {
+          arrived_at: string | null
+          attendance_status: string
           id: string
           meeting_id: string
+          position_holder_id: string | null
           present: boolean
-          user_id: string
+          user_id: string | null
         }
         Insert: {
+          arrived_at?: string | null
+          attendance_status?: string
           id?: string
           meeting_id: string
+          position_holder_id?: string | null
           present?: boolean
-          user_id: string
+          user_id?: string | null
         }
         Update: {
+          arrived_at?: string | null
+          attendance_status?: string
           id?: string
           meeting_id?: string
+          position_holder_id?: string | null
           present?: boolean
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -155,6 +164,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "attendees_position_holder_id_fkey"
+            columns: ["position_holder_id"]
+            isOneToOne: false
+            referencedRelation: "position_holders"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "attendees_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -162,6 +178,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      canon_documents: {
+        Row: {
+          body: string
+          category: string | null
+          id: string
+          slug: string
+          source_url: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          category?: string | null
+          id?: string
+          slug: string
+          source_url?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          category?: string | null
+          id?: string
+          slug?: string
+          source_url?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       correspondence: {
         Row: {
@@ -346,6 +392,7 @@ export type Database = {
       }
       meetings: {
         Row: {
+          agenda_text: string | null
           agenda_url: string | null
           conversation_end_time: string | null
           conversation_id: string | null
@@ -368,6 +415,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agenda_text?: string | null
           agenda_url?: string | null
           conversation_end_time?: string | null
           conversation_id?: string | null
@@ -390,6 +438,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agenda_text?: string | null
           agenda_url?: string | null
           conversation_end_time?: string | null
           conversation_id?: string | null
@@ -424,6 +473,55 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          organization_id: string
+          recipient_id: string | null
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          organization_id: string
+          recipient_id?: string | null
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          organization_id?: string
+          recipient_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -470,7 +568,7 @@ export type Database = {
           {
             foreignKeyName: "minutes_meeting_id_fkey"
             columns: ["meeting_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "meetings"
             referencedColumns: ["id"]
           },
@@ -576,8 +674,8 @@ export type Database = {
           ratifying_meeting_id: string | null
           result: Database["public"]["Enums"]["motion_result"] | null
           seconded_by: string | null
-          vote_abstain: number
           vote_absent: number
+          vote_abstain: number
           vote_against: number
           vote_for: number
           voting_closes_at: string | null
@@ -599,8 +697,8 @@ export type Database = {
           ratifying_meeting_id?: string | null
           result?: Database["public"]["Enums"]["motion_result"] | null
           seconded_by?: string | null
-          vote_abstain?: number
           vote_absent?: number
+          vote_abstain?: number
           vote_against?: number
           vote_for?: number
           voting_closes_at?: string | null
@@ -622,8 +720,8 @@ export type Database = {
           ratifying_meeting_id?: string | null
           result?: Database["public"]["Enums"]["motion_result"] | null
           seconded_by?: string | null
-          vote_abstain?: number
           vote_absent?: number
+          vote_abstain?: number
           vote_against?: number
           vote_for?: number
           voting_closes_at?: string | null
@@ -761,6 +859,7 @@ export type Database = {
       }
       organizations: {
         Row: {
+          agenda_lead_days: number
           created_at: string
           gmail_address: string | null
           governance_framework: string
@@ -771,6 +870,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agenda_lead_days?: number
           created_at?: string
           gmail_address?: string | null
           governance_framework?: string
@@ -781,6 +881,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agenda_lead_days?: number
           created_at?: string
           gmail_address?: string | null
           governance_framework?: string
@@ -923,6 +1024,7 @@ export type Database = {
           forwarding_email: string | null
           holder_name: string | null
           id: string
+          is_demo: boolean
           notes: string | null
           organization_id: string
           phone: string | null
@@ -940,6 +1042,7 @@ export type Database = {
           forwarding_email?: string | null
           holder_name?: string | null
           id?: string
+          is_demo?: boolean
           notes?: string | null
           organization_id: string
           phone?: string | null
@@ -957,6 +1060,7 @@ export type Database = {
           forwarding_email?: string | null
           holder_name?: string | null
           id?: string
+          is_demo?: boolean
           notes?: string | null
           organization_id?: string
           phone?: string | null
@@ -1050,8 +1154,10 @@ export type Database = {
           id: string
           is_active: boolean
           organization_id: string
+          report_kind: Database["public"]["Enums"]["report_kind"] | null
           role_email: string
           slug: string
+          submits_report: boolean
           title: string
         }
         Insert: {
@@ -1064,8 +1170,10 @@ export type Database = {
           id?: string
           is_active?: boolean
           organization_id: string
+          report_kind?: Database["public"]["Enums"]["report_kind"] | null
           role_email: string
           slug: string
+          submits_report?: boolean
           title: string
         }
         Update: {
@@ -1078,8 +1186,10 @@ export type Database = {
           id?: string
           is_active?: boolean
           organization_id?: string
+          report_kind?: Database["public"]["Enums"]["report_kind"] | null
           role_email?: string
           slug?: string
+          submits_report?: boolean
           title?: string
         }
         Relationships: [
@@ -1204,14 +1314,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      close_motion_vote: {
-        Args: { p_motion_id: string }
-        Returns: undefined
-      }
-      current_org: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      close_motion_vote: { Args: { p_motion_id: string }; Returns: undefined }
+      current_org: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1219,9 +1323,15 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_admin: {
-        Args: { _user_id: string }
-        Returns: boolean
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      match_canon: {
+        Args: { q: string }
+        Returns: {
+          rank: number
+          slug: string
+          snippet: string
+          title: string
+        }[]
       }
       motion_participation_count: {
         Args: { p_motion_id: string }
@@ -1284,6 +1394,7 @@ export type Database = {
         | "director_at_large"
         | "ex_officio"
         | "custom"
+      report_kind: "officer" | "financial"
       vote_choice: "aye" | "nay" | "abstain" | "absent"
       voting_mode: "in_meeting" | "async_portal"
     }
@@ -1301,12 +1412,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1330,11 +1441,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1355,11 +1466,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1380,11 +1491,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1397,11 +1508,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1461,6 +1572,7 @@ export const Constants = {
         "ex_officio",
         "custom",
       ],
+      report_kind: ["officer", "financial"],
       vote_choice: ["aye", "nay", "abstain", "absent"],
       voting_mode: ["in_meeting", "async_portal"],
     },

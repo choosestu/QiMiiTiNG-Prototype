@@ -8,7 +8,13 @@ export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/gmail.send",
+  // Read scopes for the agenda pipeline and Workspace search. gmail.readonly and
+  // drive.readonly are Google "restricted" scopes; drive.file is kept so the app
+  // can keep writing the agenda/minutes PDFs it creates.
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/drive.readonly",
 ].join(" ");
 
 export type GoogleTokens = {
@@ -268,4 +274,148 @@ export async function sendGmail(
   if (!res.ok) throw new Error(`Gmail send failed: ${await res.text()}`);
   const j = (await res.json()) as { id: string };
   return { messageId: j.id };
+}
+
+// ---------- Gmail (read) ----------
+
+export type GmailMessage = {
+  id: string;
+  threadId: string;
+  from: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  body: string;
+  webLink: string;
+};
+
+function decodeB64Url(data: string): string {
+  try {
+    return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+  } catch {
+    return "";
+  }
+}
+
+// Prefer a text/plain part; fall back to a crude tag-stripped text/html part.
+function extractGmailBody(payload: any): string {
+  if (!payload) return "";
+  const walk = (part: any): { plain?: string; html?: string } => {
+    const out: { plain?: string; html?: string } = {};
+    if (part.mimeType === "text/plain" && part.body?.data) out.plain = decodeB64Url(part.body.data);
+    else if (part.mimeType === "text/html" && part.body?.data) out.html = decodeB64Url(part.body.data);
+    for (const p of part.parts ?? []) {
+      const child = walk(p);
+      out.plain = out.plain ?? child.plain;
+      out.html = out.html ?? child.html;
+    }
+    return out;
+  };
+  const { plain, html } = walk(payload);
+  if (plain) return plain;
+  if (html) return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return "";
+}
+
+export async function gmailSearch(
+  orgId: string,
+  query: string,
+  maxResults = 10,
+): Promise<GmailMessage[]> {
+  const { token } = await getValidAccessToken(orgId);
+  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+    query,
+  )}&maxResults=${maxResults}`;
+  const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!listRes.ok) throw new Error(`Gmail search failed: ${await listRes.text()}`);
+  const ids = ((await listRes.json()) as { messages?: { id: string }[] }).messages ?? [];
+
+  const out: GmailMessage[] = [];
+  for (const { id } of ids) {
+    const msgRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!msgRes.ok) continue;
+    const m = (await msgRes.json()) as any;
+    const headers: { name: string; value: string }[] = m.payload?.headers ?? [];
+    const h = (n: string) =>
+      headers.find((x) => x.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+    out.push({
+      id: m.id,
+      threadId: m.threadId,
+      from: h("From"),
+      subject: h("Subject"),
+      date: h("Date"),
+      snippet: (m.snippet ?? "") as string,
+      body: extractGmailBody(m.payload),
+      webLink: `https://mail.google.com/mail/u/0/#all/${m.id}`,
+    });
+  }
+  return out;
+}
+
+// ---------- Calendar (read) ----------
+
+export type CalendarEvent = {
+  id: string;
+  summary: string;
+  start: string;
+  end: string;
+  location: string;
+  htmlLink: string;
+};
+
+export async function calendarListEvents(
+  orgId: string,
+  timeMin: string,
+  timeMax: string,
+  maxResults = 25,
+): Promise<CalendarEvent[]> {
+  const { token } = await getValidAccessToken(orgId);
+  const params = new URLSearchParams({
+    timeMin,
+    timeMax,
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: String(maxResults),
+  });
+  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Calendar list failed: ${await res.text()}`);
+  const items = ((await res.json()) as { items?: any[] }).items ?? [];
+  return items.map((e) => ({
+    id: e.id,
+    summary: (e.summary ?? "(no title)") as string,
+    start: (e.start?.dateTime ?? e.start?.date ?? "") as string,
+    end: (e.end?.dateTime ?? e.end?.date ?? "") as string,
+    location: (e.location ?? "") as string,
+    htmlLink: (e.htmlLink ?? "") as string,
+  }));
+}
+
+// ---------- Drive (search all, requires drive.readonly) ----------
+
+export type DriveFile = {
+  id: string;
+  name: string;
+  webViewLink: string;
+  mimeType: string;
+  modifiedTime: string;
+};
+
+export async function driveSearchAll(
+  orgId: string,
+  text: string,
+  maxResults = 25,
+): Promise<DriveFile[]> {
+  const { token } = await getValidAccessToken(orgId);
+  const safe = text.replace(/'/g, "\\'");
+  const q = `fullText contains '${safe}' and trashed=false`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+    q,
+  )}&fields=files(id,name,webViewLink,mimeType,modifiedTime)&pageSize=${maxResults}&orderBy=modifiedTime desc&spaces=drive`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Drive search failed: ${await res.text()}`);
+  return ((await res.json()) as { files?: DriveFile[] }).files ?? [];
 }
