@@ -539,6 +539,9 @@ export type Database = {
           drive_url: string | null
           id: string
           meeting_id: string
+          review_round: number
+          review_started_at: string | null
+          review_status: string
         }
         Insert: {
           ai_draft_created_at?: string | null
@@ -549,6 +552,9 @@ export type Database = {
           drive_url?: string | null
           id?: string
           meeting_id: string
+          review_round?: number
+          review_started_at?: string | null
+          review_status?: string
         }
         Update: {
           ai_draft_created_at?: string | null
@@ -559,6 +565,9 @@ export type Database = {
           drive_url?: string | null
           id?: string
           meeting_id?: string
+          review_round?: number
+          review_started_at?: string | null
+          review_status?: string
         }
         Relationships: [
           {
@@ -576,6 +585,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      minutes_approvals: {
+        Row: {
+          comment: string | null
+          created_at: string
+          decision: string
+          id: string
+          meeting_id: string
+          organization_id: string
+          round: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          decision: string
+          id?: string
+          meeting_id: string
+          organization_id: string
+          round: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          decision?: string
+          id?: string
+          meeting_id?: string
+          organization_id?: string
+          round?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       minutes_edits: {
         Row: {

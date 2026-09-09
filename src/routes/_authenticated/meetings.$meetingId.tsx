@@ -25,8 +25,12 @@ import {
   importFieldyTranscript,
   checkMotionsAgainstTranscript,
   draftMinutes,
-  approveMinutes,
 } from "@/lib/google.functions";
+import {
+  sendMinutesForApproval,
+  castMinutesVote,
+  getMinutesReview,
+} from "@/lib/minutes.functions";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -135,6 +139,18 @@ type Report = {
   report_text: string;
   bank_balance: number | null;
   submitted_at: string;
+};
+
+type MinutesReview = {
+  exists: boolean;
+  reviewStatus: "draft" | "in_review" | "changes_requested" | "approved";
+  round: number;
+  minutesText: string | null;
+  driveUrl: string | null;
+  eligible: { userId: string; name: string }[];
+  votes: { userId: string; name: string; decision: string; comment: string | null }[];
+  myDecision: string | null;
+  isEligible: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -948,6 +964,13 @@ function MeetingPage() {
           <MinutesCard meeting={meeting} onUpdate={refresh} />
         )}
 
+      {!isAdmin &&
+        (meeting.status === "adjourned" ||
+          meeting.status === "minutes_draft" ||
+          meeting.status === "minutes_approved") && (
+          <MinutesMemberCard meeting={meeting} currentUserId={profile.id} />
+        )}
+
       {isAdmin && <WorkspaceCard meeting={meeting} onUpdate={refresh} />}
     </div>
   );
@@ -956,11 +979,22 @@ function MeetingPage() {
 function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => void }) {
   const importTranscript = useServerFn(importFieldyTranscript);
   const draft = useServerFn(draftMinutes);
-  const approve = useServerFn(approveMinutes);
+  const sendForApproval = useServerFn(sendMinutesForApproval);
+  const getReview = useServerFn(getMinutesReview);
+  const uploadMins = useServerFn(uploadApprovedMinutes);
   const [busy, setBusy] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
   const [approvedText, setApprovedText] = useState("");
   const [segmentCount, setSegmentCount] = useState<number | null>(null);
+  const [review, setReview] = useState<MinutesReview | null>(null);
+
+  const refreshReview = useCallback(async () => {
+    try {
+      setReview((await getReview({ data: { meetingId: meeting.id } })) as MinutesReview);
+    } catch {
+      /* leave prior review state */
+    }
+  }, [getReview, meeting.id]);
 
   useEffect(() => {
     let active = true;
@@ -981,10 +1015,11 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
       setApprovedText((m?.approved_text as string) ?? (m?.ai_draft_text as string) ?? "");
       setSegmentCount(count ?? 0);
     })();
+    void refreshReview();
     return () => {
       active = false;
     };
-  }, [meeting.id]);
+  }, [meeting.id, refreshReview]);
 
   const handleImport = async () => {
     setBusy("import");
@@ -1014,18 +1049,40 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
     }
   };
 
-  const handleApprove = async () => {
+  const handleSendForApproval = async () => {
     if (!approvedText.trim()) {
-      toast.error("Approved minutes text is required.");
+      toast.error("Minutes text is required.");
       return;
     }
-    setBusy("approve");
+    setBusy("send");
     try {
-      await approve({ data: { meetingId: meeting.id, approvedText } });
-      toast.success("Minutes approved. You can now upload them to Drive below.");
+      const r = await sendForApproval({
+        data: { meetingId: meeting.id, minutesText: approvedText },
+      });
+      toast.success(
+        r.eligibleCount > 0
+          ? `Sent to ${r.eligibleCount} present member(s) for approval (round ${r.round}).`
+          : `Round ${r.round} opened, but no present members have a portal login to vote yet.`,
+      );
+      await refreshReview();
       onUpdate();
     } catch (e: any) {
       toast.error(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleStore = async () => {
+    setBusy("store");
+    try {
+      await uploadMins({ data: { meetingId: meeting.id } });
+      toast.success("Approved minutes stored to Drive.");
+      await refreshReview();
+      onUpdate();
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      toast.error(msg.includes("not connected") ? "Connect Google in Settings first." : msg);
     } finally {
       setBusy(null);
     }
@@ -1087,20 +1144,261 @@ function MinutesCard({ meeting, onUpdate }: { meeting: Meeting; onUpdate: () => 
             placeholder="Edit the AI draft above, then approve. Edits are audit-logged."
             className="font-mono text-xs"
           />
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               variant="default"
               disabled={busy !== null || !approvedText.trim()}
-              onClick={handleApprove}
+              onClick={handleSendForApproval}
             >
-              {busy === "approve"
-                ? "Approving…"
-                : meeting.status === "minutes_approved"
-                  ? "Save edits (audit logged)"
-                  : "Approve minutes"}
+              {busy === "send"
+                ? "Sending…"
+                : review && review.exists && review.reviewStatus !== "draft"
+                  ? "Amend & re-send for approval"
+                  : "Send to exec for approval"}
             </Button>
           </div>
         </div>
+
+        {review && review.exists && review.reviewStatus !== "draft" && (
+          <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+            <ReviewStatusPanel review={review} />
+            {review.reviewStatus === "approved" && (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Approved by consent. Store the final minutes to the association's Drive.
+                </p>
+                {review.driveUrl ? (
+                  <a
+                    href={review.driveUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink className="size-3" /> Stored
+                  </a>
+                ) : (
+                  <Button size="sm" disabled={busy !== null} onClick={handleStore}>
+                    {busy === "store" ? "Storing…" : "Store to Drive"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewStatusPanel({ review }: { review: MinutesReview }) {
+  const approvedIds = new Set(
+    review.votes.filter((v) => v.decision === "approved").map((v) => v.userId),
+  );
+  const changeRequests = review.votes.filter((v) => v.decision === "changes_requested");
+  const pending = review.eligible.filter(
+    (e) => !review.votes.some((v) => v.userId === e.userId),
+  );
+  const label =
+    review.reviewStatus === "approved"
+      ? "Approved by consent"
+      : review.reviewStatus === "changes_requested"
+        ? "Correction requested — vote paused"
+        : "Out for approval";
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">
+          {label} · round {review.round}
+        </span>
+        <Badge
+          variant={
+            review.reviewStatus === "approved"
+              ? "secondary"
+              : review.reviewStatus === "changes_requested"
+                ? "destructive"
+                : "outline"
+          }
+        >
+          {approvedIds.size}/{review.eligible.length} approved
+        </Badge>
+      </div>
+      {changeRequests.length > 0 && (
+        <div className="space-y-1">
+          <p className="font-medium text-destructive">Corrections requested:</p>
+          <ul className="ml-4 list-disc">
+            {changeRequests.map((c) => (
+              <li key={c.userId}>
+                <span className="font-medium text-foreground">{c.name}:</span> {c.comment}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground">
+            The Secretary amends the minutes and re-sends them for a fresh vote.
+          </p>
+        </div>
+      )}
+      {review.reviewStatus !== "approved" && pending.length > 0 && (
+        <p className="text-muted-foreground">
+          Awaiting: {pending.map((p) => p.name).join(", ") || "none"}
+        </p>
+      )}
+      {review.reviewStatus === "approved" && (
+        <p className="text-muted-foreground">
+          All present voting members approved these minutes as circulated.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MinutesMemberCard({
+  meeting,
+  currentUserId,
+}: {
+  meeting: Meeting;
+  currentUserId: string;
+}) {
+  const getReview = useServerFn(getMinutesReview);
+  const vote = useServerFn(castMinutesVote);
+  const [review, setReview] = useState<MinutesReview | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [showComment, setShowComment] = useState(false);
+  const [comment, setComment] = useState("");
+  void currentUserId;
+
+  const load = useCallback(async () => {
+    try {
+      setReview((await getReview({ data: { meetingId: meeting.id } })) as MinutesReview);
+    } catch {
+      /* ignore */
+    }
+  }, [getReview, meeting.id]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!review || !review.exists || review.reviewStatus === "draft") return null;
+
+  const open =
+    review.reviewStatus === "in_review" || review.reviewStatus === "changes_requested";
+  const canVote = open && review.isEligible;
+
+  const submit = async (decision: "approved" | "changes_requested") => {
+    if (decision === "changes_requested" && !comment.trim()) {
+      toast.error("Please describe the correction.");
+      return;
+    }
+    setBusy(decision);
+    try {
+      await vote({
+        data: {
+          meetingId: meeting.id,
+          decision,
+          comment: decision === "changes_requested" ? comment : undefined,
+        },
+      });
+      toast.success(
+        decision === "approved"
+          ? "You approved the minutes."
+          : "Correction submitted. The Secretary will amend and re-send.",
+      );
+      setShowComment(false);
+      setComment("");
+      await load();
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Minutes approval</CardTitle>
+        <CardDescription>
+          {review.reviewStatus === "approved"
+            ? "These minutes have been approved by the exec."
+            : review.isEligible
+              ? "Review the minutes and approve them as circulated, or request a correction."
+              : "The minutes are under review by the members who were present at the meeting."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {review.minutesText && (
+          <div className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/20 p-3 text-sm">
+            {review.minutesText}
+          </div>
+        )}
+        <ReviewStatusPanel review={review} />
+        {review.reviewStatus === "approved" && review.driveUrl && (
+          <a
+            href={review.driveUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+          >
+            <ExternalLink className="size-3" /> Open the approved minutes (PDF)
+          </a>
+        )}
+        {canVote && (
+          <div className="space-y-2">
+            {review.myDecision && (
+              <p className="text-xs text-muted-foreground">
+                Your current response:{" "}
+                <span className="font-medium">
+                  {review.myDecision === "changes_requested"
+                    ? "correction requested"
+                    : "approved"}
+                </span>
+                . You can change it while the round is open.
+              </p>
+            )}
+            {!showComment ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={busy !== null} onClick={() => submit("approved")}>
+                  {busy === "approved" ? "Submitting…" : "Approve as circulated"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => setShowComment(true)}
+                >
+                  Request a correction
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Textarea
+                  rows={3}
+                  placeholder="Describe the correction needed."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={busy !== null}
+                    onClick={() => submit("changes_requested")}
+                  >
+                    {busy === "changes_requested" ? "Submitting…" : "Submit correction"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowComment(false);
+                      setComment("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -684,10 +684,16 @@ export const uploadApprovedMinutes = createServerFn({ method: "POST" })
       .maybeSingle();
     const { data: minutes } = await supabase
       .from("minutes")
-      .select("approved_text, approved_at")
+      .select("approved_text, approved_at, review_status")
       .eq("meeting_id", data.meetingId)
       .maybeSingle();
     if (!minutes?.approved_text) throw new Error("No approved minutes to upload.");
+    // Only minutes approved by the exec (by consent) may be stored to Drive.
+    if (minutes.review_status !== "approved") {
+      throw new Error(
+        "These minutes have not been approved by the exec yet. Send them for approval and wait for consent before storing.",
+      );
+    }
 
     const { renderDocumentPdf } = await import("./pdf.server");
     const { uploadPdfToMeeting } = await import("./google.server");
