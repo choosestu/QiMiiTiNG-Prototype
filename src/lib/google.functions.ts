@@ -728,13 +728,23 @@ export const importFieldyTranscript = createServerFn({ method: "POST" })
     if (!meeting.fieldy_enabled)
       throw new Error("Fieldy recording is not enabled for this meeting.");
 
-    // Determine time window. Prefer recorded conversation times; fall back to meeting_date.
+    // Determine the time window to pull from Fieldy.
+    // Start: when the meeting was called to order, else the meeting date at 00:00.
+    // End: adjournment time if set, otherwise NOW (the meeting is still in
+    // progress, so capture everything spoken up to this import). Falling back to
+    // the meeting date here was a bug: a meeting called to order on a different
+    // day than its scheduled date (e.g. an old meeting demoed later) produced an
+    // inverted start>end window and imported nothing.
     const start = meeting.conversation_start_time
       ? new Date(meeting.conversation_start_time)
       : new Date(`${meeting.meeting_date.slice(0, 10)}T00:00:00Z`);
-    const end = meeting.conversation_end_time
+    let end = meeting.conversation_end_time
       ? new Date(meeting.conversation_end_time)
-      : new Date(`${meeting.meeting_date.slice(0, 10)}T23:59:59Z`);
+      : new Date();
+    // Guard against an inverted or empty window.
+    if (end.getTime() <= start.getTime()) {
+      end = new Date(start.getTime() + 12 * 60 * 60 * 1000);
+    }
 
     const { fetchFieldyTranscriptions } = await import("./fieldy.server");
     const segments = await fetchFieldyTranscriptions({
