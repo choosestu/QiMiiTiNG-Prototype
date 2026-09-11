@@ -163,3 +163,27 @@
     letter-spacing: -0.01em;
   }
 }
+
+/* Touch targets: on touch/coarse-pointer devices, enforce a 44x44 minimum on
+   interactive controls (WCAG 2.5.5). min-height overrides smaller fixed heights
+   like the h-7 attendance buttons. Desktop/mouse is unaffected. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  summary,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  textarea,
+  a[data-touch-target] {
+    min-height: 44px;
+  }
+  /* Square icon-only buttons need width too. */
+  button:has(> svg:only-child) {
+    min-width: 44px;
+  }
+}
+
+/* Respect the iOS safe-area at the bottom (home indicator) for the mobile nav. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

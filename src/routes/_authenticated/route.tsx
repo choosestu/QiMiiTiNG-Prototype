@@ -2,7 +2,14 @@ import { createFileRoute, Outlet, redirect, Link, useNavigate } from "@tanstack/
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, signOut, setViewAsRole, type AppRole } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import {
+  LogOut,
+  LayoutDashboard,
+  CalendarDays,
+  MessageSquare,
+  Sparkles,
+  Settings as SettingsIcon,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -39,10 +46,10 @@ function AuthenticatedLayout() {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <Link to="/dashboard" className="flex items-baseline gap-2">
+          <Link to="/dashboard" className="flex min-w-0 items-baseline gap-2">
             <span className="font-serif text-xl font-semibold">QiMiiTiNG</span>
             {profile && (
-              <span className="text-xs text-muted-foreground">
+              <span className="hidden truncate text-xs text-muted-foreground sm:inline">
                 · {profile.name} · {isAdmin ? "Admin" : "Officer"}
               </span>
             )}
@@ -86,9 +93,44 @@ function AuthenticatedLayout() {
         </div>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 pb-24 pt-6 sm:py-8 md:pb-8">
         <Outlet />
       </main>
+
+      <MobileTabBar isAdmin={isAdmin} />
     </div>
+  );
+}
+
+// Bottom tab bar for phones/tablets. Hidden at md+ where per-page nav and the
+// header links are visible. Primary destinations only; Settings is admin-only.
+function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
+  const tabs = [
+    { to: "/dashboard", label: "Home", icon: LayoutDashboard },
+    { to: "/calendar", label: "Calendar", icon: CalendarDays },
+    { to: "/chat", label: "Chat", icon: MessageSquare },
+    { to: "/assistant", label: "Assistant", icon: Sparkles },
+    ...(isAdmin ? [{ to: "/settings", label: "Settings", icon: SettingsIcon }] : []),
+  ] as const;
+  return (
+    <nav
+      className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card md:hidden"
+      aria-label="Primary"
+    >
+      <ul className="mx-auto grid max-w-lg" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+        {tabs.map((t) => (
+          <li key={t.to}>
+            <Link
+              to={t.to}
+              activeProps={{ className: "text-primary" }}
+              className="flex min-h-[44px] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-muted-foreground"
+            >
+              <t.icon className="h-5 w-5" aria-hidden />
+              {t.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

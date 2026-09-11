@@ -147,7 +147,7 @@ function DashboardPage() {
               : "Submit your officer reports and review approved meeting documents."}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="hidden shrink-0 items-center gap-1 md:flex">
           <Button variant="ghost" size="sm" asChild>
             <Link to="/calendar">Calendar</Link>
           </Button>

@@ -134,7 +134,7 @@ function ChatPage() {
         : nameOf(active);
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-4xl flex-col px-4 py-4">
+    <div className="mx-auto flex h-[calc(100dvh-7.5rem)] max-w-4xl flex-col px-4 py-4 md:h-[calc(100vh-3rem)]">
       <div className="flex items-center gap-2 pb-3">
         <Button variant="ghost" size="sm" onClick={() => router.navigate({ to: "/dashboard" })}>
           <ArrowLeft className="mr-1 size-4" /> Dashboard
