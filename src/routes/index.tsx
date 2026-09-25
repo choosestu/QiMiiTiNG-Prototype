@@ -11,11 +11,11 @@ export const Route = createFileRoute("/")({
   },
   head: () => ({
     meta: [
-      { title: "QiMiiTiNG — Meeting automation for volunteer organizations" },
+      { title: "QiMiiTiNG: Meeting automation for volunteer organizations" },
       {
         name: "description",
         content:
-          "Officer reports, agendas, motions, transcripts, and AI-drafted minutes — built for volunteer boards.",
+          "Officer reports, agendas, motions, transcripts, and AI-drafted minutes, built for volunteer boards.",
       },
     ],
   }),
@@ -35,21 +35,23 @@ function Landing() {
   return (
     <main className="bg-background">
       <section className="mx-auto max-w-4xl px-4 py-20 text-center sm:py-28">
-        <p className="text-sm font-medium uppercase tracking-widest text-primary">
-          QiMiiTiNG · Phase 1
-        </p>
+        <p className="text-sm font-medium uppercase tracking-widest text-primary">QiMiiTiNG</p>
         <h1 className="mt-4 font-serif text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
           Meeting automation for volunteer organizations
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-          Run your board the way Robert's Rules intended — without the paperwork.
-          QiMiiTiNG handles reports, agendas, motions, transcripts and minutes,
-          end to end.
+          Run your board the way Robert's Rules intended, without the paperwork. QiMiiTiNG handles
+          reports, agendas, motions, transcripts and minutes, end to end.
         </p>
-        <div className="mt-10">
-          <Button asChild size="lg">
-            <Link to="/auth">
+        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Button asChild size="lg" className="w-full sm:w-auto">
+            <Link to="/auth" data-touch-target>
               Sign in <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+            <Link to="/pricing" data-touch-target>
+              See pricing
             </Link>
           </Button>
         </div>
