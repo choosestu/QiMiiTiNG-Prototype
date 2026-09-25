@@ -145,6 +145,8 @@ export const Route = createFileRoute("/pricing")({
       { name: "description", content: PAGE_DESCRIPTION },
       { property: "og:title", content: PAGE_TITLE },
       { property: "og:description", content: PAGE_DESCRIPTION },
+      { name: "twitter:title", content: PAGE_TITLE },
+      { name: "twitter:description", content: PAGE_DESCRIPTION },
     ],
   }),
   component: PricingPage,
@@ -180,7 +182,7 @@ function PricingPage() {
           notetaker. One organization, one price, no setup fee.
         </p>
 
-        <div className="mx-auto mt-8 w-full max-w-md">
+        <div className="mx-auto mt-8 flex w-full justify-center">
           <BillingToggle value={billing} onChange={setBilling} />
         </div>
 
@@ -213,11 +215,14 @@ function BillingToggle({
         if (next === "monthly" || next === "annual") onChange(next);
       }}
     >
-      <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-2">
-        <TabsTrigger value="monthly" className="w-full whitespace-normal px-3 py-2">
+      <TabsList className="flex h-auto w-full flex-col sm:w-auto sm:flex-row">
+        <TabsTrigger value="monthly" className="w-full px-4 py-2 sm:w-auto">
           Monthly
         </TabsTrigger>
-        <TabsTrigger value="annual" className="w-full whitespace-normal px-3 py-2">
+        <TabsTrigger
+          value="annual"
+          className="w-full whitespace-normal px-4 py-2 sm:w-auto sm:whitespace-nowrap"
+        >
           Annual (best value, 2 months free)
         </TabsTrigger>
       </TabsList>
@@ -255,7 +260,7 @@ function PlanCard({ billing }: { billing: Billing }) {
             Questions? Email us at{" "}
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
-              className="font-medium text-primary underline-offset-4 hover:underline"
+              className="inline-flex items-center font-medium text-primary underline-offset-4 hover:underline"
               data-touch-target
             >
               {SUPPORT_EMAIL}
@@ -293,7 +298,7 @@ function PremiumStrip() {
           {formatCad(PLAN_A_NOTE.setup)} guided setup. Most boards start on the standard plan above.{" "}
           <a
             href={BOOKING_URL}
-            className="font-medium text-primary underline-offset-4 hover:underline"
+            className="inline-flex items-center font-medium text-primary underline-offset-4 hover:underline"
             data-touch-target
           >
             Talk to us
